@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Upload, FileText, Table as TableIcon, FileCheck, ChevronRight, BookOpen, Clock, Tag, AlertCircle } from "lucide-react";
+import { Upload, FileText, Table as TableIcon, FileCheck, ChevronRight, BookOpen, Clock, Tag, AlertCircle, FileWarning } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI, Type } from "@google/genai";
 import DOMPurify from "dompurify";
@@ -51,6 +51,7 @@ export default function App() {
   const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
   const [showQualityReport, setShowQualityReport] = useState(false);
   const [serverReady, setServerReady] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,6 +82,7 @@ export default function App() {
     
     for (let i = 0; i < retries; i++) {
       try {
+        console.log(`[Fetch] Attempt ${i+1}: ${url}`, options?.method || 'GET');
         const response = await fetch(url, options);
         const text = await response.text();
         
@@ -89,7 +91,8 @@ export default function App() {
             if (response.status === 204) return null;
             return {};
           }
-          throw new Error(`Server returned error ${response.status} with no body.`);
+          console.error(`[Fetch] 404/Null body at ${url}. Response Headers:`, [...response.headers.entries()]);
+          throw new Error(`Server returned error ${response.status} with no body for ${url}.`);
         }
 
         try {
@@ -154,11 +157,12 @@ export default function App() {
       
       setErrors([]); // Clear the waiting message
 
-      const { jobId } = await robustFetch("/api/create-job", {
+      const { jobId: newJobId } = await robustFetch("/api/create-job", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ totalFiles })
       });
+      setJobId(newJobId);
 
       // Step 1: Upload in batches
       for (let i = 0; i < filesArray.length; i += BATCH_SIZE) {
@@ -170,7 +174,7 @@ export default function App() {
           batchFormData.append("files", f, fileName);
         });
 
-        await robustFetch(`/api/upload-batch/${jobId}`, {
+        await robustFetch(`/api/upload-batch/${newJobId}`, {
           method: "POST",
           body: batchFormData
         });
@@ -187,7 +191,7 @@ export default function App() {
       
       while (!jobCompleted) {
         try {
-          const job = await robustFetch(`/api/job-status/${jobId}`);
+          const job = await robustFetch(`/api/job-status/${newJobId}`);
           setJobProgress(job.progress);
           
           if (job.status === "completed") {
@@ -288,10 +292,10 @@ export default function App() {
 
   // AI initialization helper
   const getAI = () => {
-    // @ts-ignore
-    const key = import.meta.env.VITE_GEMINI_API_KEY;
+    // Standardize to usage defined in vite.config.ts
+    const key = process.env.GEMINI_API_KEY;
     if (!key) {
-      console.error("VITE_GEMINI_API_KEY is not defined.");
+      console.error("GEMINI_API_KEY is not defined. Please check environment configuration.");
       return null;
     }
     return new GoogleGenAI({ apiKey: key });
@@ -311,14 +315,14 @@ export default function App() {
       
       const response = await gAI.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Analyze this file collection and return JSON metadata.
+        contents: `Analyze this file collection and return JSON metadata defining the high-level intent.
           
-          Questions:
-          1. Topic: Unifying theme name.
-          2. Type: ONE of [SINGLE_ENTITY, MULTIPLE_COMPARABLE, PROCESS_TIMELINE].
-          3. EntityType: If multiple, what are they? (e.g. "Vendors", "Recipes").
+          Guidelines for classification:
+          - SINGLE_ENTITY: All files pertain to exactly one subject (e.g. one legal case, one company merger).
+          - MULTIPLE_COMPARABLE: Similar files describing different entities (e.g. 50 different invoices, 10 vendor proposals).
+          - PROCESS_TIMELINE: Files represent steps in a single evolving sequence (e.g. a construction project, a court trial history).
           
-          Content:
+          Sample Content:
           ${sampleContent}`,
         config: {
           responseMimeType: "application/json",
@@ -429,8 +433,10 @@ export default function App() {
     }
   };
 
-  const downloadWiki = () => {
+  const downloadWiki = async (jobId?: string) => {
     if (!selectedEntity || entities.length === 0) return;
+    
+    // 1. Client-Side Wiki HTML
     const entity = entities.find(e => e.entity_name === selectedEntity);
     if (!entity) return;
 
@@ -520,6 +526,14 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
+    // 2. Optional Backend Data Export
+    if (jobId) {
+      const confirmJson = confirm("Success! Wiki HTML folder generated. Would you also like to download the raw JSON processing data from the server?");
+      if (confirmJson) {
+        window.location.href = `/api/job-export/${jobId}`;
+      }
+    }
   };
 
   const renderTable = (table: TableData) => {
@@ -652,7 +666,7 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Context:</span>
-               <span className="text-xs text-slate-700 font-mono bg-slate-100 px-2 py-0.5 rounded">/uploads/session_{Math.random().toString(36).substring(7)}/</span>
+               <span className="text-xs text-slate-700 font-mono bg-slate-100 px-2 py-0.5 rounded">/uploads/session_{jobId || "initializing"}/</span>
             </div>
             <span className="text-slate-200">|</span>
             <div className="flex items-center gap-2">
@@ -690,7 +704,7 @@ export default function App() {
                 </button>
                 <button 
                   disabled={step < 7}
-                  onClick={downloadWiki}
+                  onClick={() => downloadWiki(jobId || undefined)}
                   className="px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded shadow-sm hover:bg-slate-800 disabled:opacity-50"
                 >
                   Download Wiki Bundle
