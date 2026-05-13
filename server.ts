@@ -1,14 +1,17 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import * as mammoth from "mammoth";
-// @ts-ignore
-import pdf from "pdf-parse/lib/pdf-parse.js";
-import { createWorker } from "tesseract.js";
-import mime from "mime-types";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
+import mime from "mime-types";
+import { createWorker } from "tesseract.js";
+
+const require = createRequire(import.meta.url);
+const pdf = require("pdf-parse");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,7 +65,6 @@ async function startServer() {
               const sheet = workbook.Sheets[sheetName];
               const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
               if (rows.length >= 1) {
-                 // Step 3 logic: check if it's a table (2x2 or header)
                  const colCount = rows[0]?.length || 0;
                  if (rows.length >= 2 && colCount >= 2) {
                    parsedData.tables.push({
@@ -86,11 +88,10 @@ async function startServer() {
             }
             parsedData.text = content;
 
-            // Step 3 logic for text files: detect aligned columns
             const lines = content.split('\n');
             const tableRows: any[][] = [];
             lines.forEach(line => {
-              const cols = line.trim().split(/\s{2,}/); // Look for 2+ spaces
+              const cols = line.trim().split(/\s{2,}/); 
               if (cols.length >= 2) {
                 tableRows.push(cols);
               }
@@ -150,13 +151,17 @@ async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true'
+      },
       appType: "spa",
       root: process.cwd()
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // In production, server.cjs is in /dist, so static files are in the same directory
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
