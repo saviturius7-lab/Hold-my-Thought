@@ -42,6 +42,7 @@ interface FolderIntent {
 export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [step, setStep] = useState<number>(0);
+  const [jobProgress, setJobProgress] = useState<number>(0);
   const [parsedFiles, setParsedFiles] = useState<ParsedFile[]>([]);
   const [folderIntent, setFolderIntent] = useState<FolderIntent | null>(null);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -75,7 +76,7 @@ export default function App() {
     }
 
     try {
-      // Step 1: File discovery
+      // Step 1: Uploading files
       setStep(1);
       
       const response = await fetch("/api/process-files", {
@@ -83,27 +84,71 @@ export default function App() {
         body: formData,
       });
 
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error("Server returned an invalid response (not JSON). The backend might be starting or crashing.");
+      }
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to process files on server");
+        throw new Error(data.error || "Failed to start processing");
       }
 
-      setStep(2); // Extraction
-      const data = await response.json();
+      const { jobId } = data;
       
-      setStep(3); // Normalization
-      setParsedFiles(data.results);
-      if (data.errors && data.errors.length > 0) {
-        setErrors(prev => [...prev, ...data.errors]);
+      // Step 2 & 3: Polling for background process
+      setStep(2);
+      let jobCompleted = false;
+      
+      while (!jobCompleted) {
+        const statusRes = await fetch(`/api/job-status/${jobId}`);
+        const statusText = await statusRes.text();
+        let job;
+        try {
+          job = JSON.parse(statusText);
+        } catch (e) {
+          console.error("Invalid status response", statusText);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          continue;
+        }
+
+        if (!statusRes.ok) throw new Error(job.error || "Failed to track job status");
+        
+        setJobProgress(job.progress);
+        
+        if (job.status === "completed") {
+          setParsedFiles(job.results);
+          if (job.errors && job.errors.length > 0) {
+            setErrors(prev => [...prev, ...job.errors]);
+          }
+          jobCompleted = true;
+          setStep(3); // Wait for Normalization
+        } else if (job.status === "failed") {
+          throw new Error("Background processing failed");
+        } else {
+          // Still processing, wait before next poll
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
       }
 
-      if (!data.results || data.results.length === 0) {
+      if (parsedFiles.length === 0 && !jobCompleted) {
+         // This block handles the race condition where parsedFiles might not be set yet in the state
+      }
+
+      // Re-fetch to ensure we have results if state update was slow
+      const finalRes = await fetch(`/api/job-status/${jobId}`);
+      const finalJob = await finalRes.json();
+      setParsedFiles(finalJob.results);
+
+      if (!finalJob.results || finalJob.results.length === 0) {
         throw new Error("No readable files found. Ensure you uploaded supported formats (.xlsx, .pdf, .docx, .png, .txt).");
       }
 
       // Step 4: Analyis (Gemini)
       setStep(4);
-      await analyzeFolderIntent(data.results);
+      await analyzeFolderIntent(finalJob.results);
 
     } catch (err: any) {
       console.error(err);
@@ -627,11 +672,16 @@ export default function App() {
                           transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                         />
                         <div className="absolute inset-0 flex items-center justify-center">
-                           <span className="text-2xl font-mono font-bold text-slate-900">{Math.round((step / 7) * 100)}%</span>
+                           <span className="text-2xl font-mono font-bold text-slate-900">{step >= 2 && step <= 3 ? jobProgress : Math.round((step / 7) * 100)}%</span>
                         </div>
                      </div>
                      <h3 className="text-2xl font-serif italic text-slate-900 mb-2">Processing Knowledge</h3>
-                     <p className="text-slate-400 font-mono text-[10px] uppercase tracking-widest mb-12">Step {step} of 7: Synchronizing Vectors</p>
+                     <p className="text-slate-400 font-mono text-[10px] uppercase tracking-widest mb-12">
+                       {step === 1 ? "Uploading Source Files..." : 
+                        step === 2 ? `Processing Files (${jobProgress}%)` :
+                        step === 3 ? "Finalizing Extraction..." :
+                        `Step ${step} of 7: Synchronizing Vectors`}
+                     </p>
                      
                      <div className="space-y-1 text-left bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
                         {[1, 2, 3, 4, 5, 6].map((s) => (
@@ -644,8 +694,8 @@ export default function App() {
                               {step > s ? '✓' : s}
                             </div>
                             <span className={`text-xs font-semibold ${step >= s ? 'text-slate-700' : 'text-slate-300'}`}>
-                              {s === 1 && 'File Integrity Discovery'}
-                              {s === 2 && 'Extraction & Normalization'}
+                              {s === 1 && 'Ingestion & Integrity Check'}
+                              {s === 2 && 'Background Extraction (OCR/PDF/Mime)'}
                               {s === 3 && 'Relational Table Mapping'}
                               {s === 4 && 'Topic Intent Analysis'}
                               {s === 5 && 'Entity Conflict Resolution'}

@@ -9,6 +9,8 @@ import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import mime from "mime-types";
 import { createWorker } from "tesseract.js";
+import pLimit from "p-limit";
+import fs from "fs";
 
 const require = createRequire(import.meta.url);
 const pdf = require("pdf-parse");
@@ -16,21 +18,69 @@ const pdf = require("pdf-parse");
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// In-memory job storage (Map)
+interface Job {
+  id: string;
+  status: "processing" | "completed" | "failed";
+  progress: number;
+  totalFiles: number;
+  completedFiles: number;
+  results: any[];
+  errors: string[];
+  createdAt: number;
+}
+
+const jobs = new Map<string, Job>();
+
+// Clean up old jobs every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of jobs.entries()) {
+    if (now - job.createdAt > 3600000) { // 1 hour
+      jobs.delete(id);
+    }
+  }
+}, 3600000);
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Configure Multer for multi-file upload
-  const upload = multer({ 
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+  // Ensure uploads directory exists
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  // Configure Multer for disk storage
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
   });
 
-  app.use(express.json({ limit: '50mb' }));
+  const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+  });
+
+  app.use(express.json({ limit: '100mb' }));
 
   // API Routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.get("/api/job-status/:jobId", (req, res) => {
+    const job = jobs.get(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+    res.json(job);
   });
 
   app.post("/api/process-files", upload.array("files"), async (req, res) => {
@@ -41,10 +91,48 @@ async function startServer() {
         return res.status(400).json({ error: "No readable files in folder" });
       }
 
-      const results = [];
-      const errors = [];
+      const jobId = Math.random().toString(36).substring(7);
+      const job: Job = {
+        id: jobId,
+        status: "processing",
+        progress: 0,
+        totalFiles: files.length,
+        completedFiles: 0,
+        results: [],
+        errors: [],
+        createdAt: Date.now()
+      };
+      jobs.set(jobId, job);
 
-      for (const file of files) {
+      // Respond immediately
+      res.json({ jobId, message: "Processing started" });
+
+      // Start background processing
+      processJobAsync(job, files);
+
+    } catch (error) {
+      console.error("Internal Server Error:", error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // API 404 handler to prevent HTML response for API failures
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `API route ${req.originalUrl} not found` });
+  });
+
+  async function processJobAsync(job: Job, files: Express.Multer.File[]) {
+    const limit = pLimit(3); // Concurrency limit
+    let tesseractWorker: any = null;
+
+    try {
+      // Lazy initialize Tesseract worker ONLY if there are images
+      const imageFiles = files.filter(f => [".png", ".jpg", ".jpeg"].includes(path.extname(f.originalname).toLowerCase()));
+      if (imageFiles.length > 0) {
+        tesseractWorker = await createWorker('eng');
+      }
+
+      const tasks = files.map(file => limit(async () => {
         try {
           const fileId = Math.random().toString(36).substring(7);
           const extension = path.extname(file.originalname).toLowerCase();
@@ -59,32 +147,34 @@ async function startServer() {
             text: ""
           };
 
+          const fileBuffer = fs.readFileSync(file.path);
+
           if (extension === ".xlsx" || extension === ".xls" || extension === ".csv" || extension === ".tsv" || extension === ".ods") {
-            const workbook = XLSX.read(file.buffer, { type: "buffer" });
+            const workbook = XLSX.read(fileBuffer, { type: "buffer" });
             workbook.SheetNames.forEach(sheetName => {
               const sheet = workbook.Sheets[sheetName];
               const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
               if (rows.length >= 1) {
                  const colCount = rows[0]?.length || 0;
                  if (rows.length >= 2 && colCount >= 2) {
-                   parsedData.tables.push({
-                     tableId: `table_${fileId}_${sheetName}`,
-                     sheetName,
-                     rowCount: rows.length,
-                     colCount,
-                     data: rows,
-                     provenance: `Source: ${file.originalname}, Sheet: ${sheetName}`
-                   });
+                    parsedData.tables.push({
+                      tableId: `table_${fileId}_${sheetName}`,
+                      sheetName,
+                      rowCount: rows.length,
+                      colCount,
+                      data: rows,
+                      provenance: `Source: ${file.originalname}, Sheet: ${sheetName}`
+                    });
                  }
               }
             });
           } else if (extension === ".txt" || extension === ".pdf") {
             let content = "";
             if (extension === ".pdf") {
-               const data = await pdf(file.buffer);
+               const data = await pdf(fileBuffer);
                content = data.text;
             } else {
-               content = file.buffer.toString('utf-8');
+               content = fileBuffer.toString('utf-8');
             }
             parsedData.text = content;
 
@@ -107,8 +197,8 @@ async function startServer() {
               });
             }
           } else if (extension === ".docx") {
-            const result = await mammoth.convertToHtml({ buffer: file.buffer });
-            parsedData.text = (await mammoth.extractRawText({ buffer: file.buffer })).value;
+            const result = await mammoth.convertToHtml({ buffer: fileBuffer });
+            parsedData.text = (await mammoth.extractRawText({ buffer: fileBuffer })).value;
             const html = result.value;
             const tableMatches = html.match(/<table.*?>(.*?)<\/table>/g);
             if (tableMatches) {
@@ -121,39 +211,57 @@ async function startServer() {
                });
             }
           } else if ([".png", ".jpg", ".jpeg"].includes(extension)) {
-            const worker = await createWorker('eng');
-            const { data: { text, confidence } } = await worker.recognize(file.buffer);
-            await worker.terminate();
-            parsedData.text = text;
-            parsedData.ocrConfidence = confidence;
-            if (confidence < 70) {
-              parsedData.needsReview = true;
+            if (tesseractWorker) {
+              const { data: { text, confidence } } = await tesseractWorker.recognize(fileBuffer);
+              parsedData.text = text;
+              parsedData.ocrConfidence = confidence;
+              if (confidence < 70) {
+                parsedData.needsReview = true;
+              }
             }
           } else {
-            errors.push(`Unsupported file type: ${extension} for file ${file.originalname}`);
-            continue;
+            job.errors.push(`Unsupported file type: ${extension} for file ${file.originalname}`);
+            return;
           }
 
-          results.push(parsedData);
+          job.results.push(parsedData);
         } catch (err) {
           console.error(`Error processing ${file.originalname}:`, err);
-          errors.push(`Error processing ${file.originalname}: ${err instanceof Error ? err.message : String(err)}`);
+          job.errors.push(`Error processing ${file.originalname}: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          // Clean up temp file
+          try {
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          } catch (e) {
+            console.error("error deleting temp file", e);
+          }
+          
+          job.completedFiles++;
+          job.progress = Math.round((job.completedFiles / job.totalFiles) * 100);
         }
-      }
+      }));
 
-      res.json({ results, errors });
-    } catch (error) {
-      console.error("Internal Server Error:", error);
-      res.status(500).json({ error: "Internal Server Error" });
+      await Promise.all(tasks);
+      job.status = "completed";
+      job.progress = 100;
+    } catch (e) {
+      console.error("Job processing failed", e);
+      job.status = "failed";
+    } finally {
+      if (tesseractWorker) {
+        await tesseractWorker.terminate();
+      }
     }
-  });
+  }
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true'
+        hmr: false // Explicitly disable HMR to avoid port 24678 conflicts
       },
       appType: "spa",
       root: process.cwd()
