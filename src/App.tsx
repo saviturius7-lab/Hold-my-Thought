@@ -4,13 +4,13 @@ import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI, Type } from "@google/genai";
 import DOMPurify from "dompurify";
 
-// Types based on the User Request
+// Strict Interfaces
 interface TableData {
   tableId: string;
   sheetName?: string;
   rowCount: number;
   colCount: number;
-  data?: any[][];
+  data?: unknown[][];
   html?: string;
   provenance: string;
 }
@@ -387,14 +387,23 @@ export default function App() {
       // Optimization: lowercase names for faster matching
       const entityMatchers = names.map(n => ({ name: n, lower: n.toLowerCase() }));
 
+      // Optimization: pre-calculate lowercase versions for matching
+      const lowerFiles = files.map(f => ({
+        ...f,
+        lowerName: f.fileName.toLowerCase(),
+        lowerText: f.text.toLowerCase(),
+        lowerTableData: f.tables.map(t => 
+          t.data?.map(row => row.map(cell => String(cell).toLowerCase())) || []
+        )
+      }));
+
       const grouped: Entity[] = entityMatchers.map(({ name, lower }) => {
-        const belongs = files.filter(f => {
-          const fileNameMatch = f.fileName.toLowerCase().includes(lower);
-          const textMatch = f.text.toLowerCase().includes(lower);
-          const tableMatch = f.tables.some(t => 
-            t.data?.some(row => row.some(cell => String(cell).toLowerCase().includes(lower)))
+        const belongs = lowerFiles.filter(f => {
+          if (f.lowerName.includes(lower)) return true;
+          if (f.lowerText.includes(lower)) return true;
+          return f.lowerTableData.some(tableRows => 
+            tableRows.some(row => row.some(cellLower => cellLower.includes(lower)))
           );
-          return fileNameMatch || textMatch || tableMatch;
         });
         
         return {

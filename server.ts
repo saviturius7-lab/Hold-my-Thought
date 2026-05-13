@@ -13,16 +13,15 @@ import { fork } from "child_process";
 import cors from "cors";
 
 // Path resolution helper for ESM/CJS compatibility
-const getDirname = () => {
+const _dirname = (() => {
   try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {
     // @ts-ignore
     return __dirname;
-  } catch (e) {
-    return path.dirname(fileURLToPath(import.meta.url));
   }
-};
+})();
 
-const _dirname = getDirname();
 const _require = createRequire(import.meta.url);
 const pdf = _require("pdf-parse");
 
@@ -32,7 +31,7 @@ interface TableData {
   sheetName?: string;
   rowCount: number;
   colCount: number;
-  data?: any[][];
+  data?: unknown[][];
   html?: string;
   provenance: string;
 }
@@ -111,9 +110,12 @@ async function startServer() {
         execArgv: isProd ? [] : ['--loader', 'tsx']
       });
 
-      child.on('message', (msg: any) => {
-        if (msg.type === 'success') resolve({ text: msg.text, confidence: msg.confidence });
-        else if (msg.type === 'error') reject(new Error(msg.message));
+      child.on('message', (msg: { type: string; text?: string; confidence?: number; message?: string }) => {
+        if (msg.type === 'success') {
+          resolve({ text: msg.text || "", confidence: msg.confidence || 0 });
+        } else if (msg.type === 'error') {
+          reject(new Error(msg.message || "OCR worker internal error"));
+        }
       });
 
       child.on('error', reject);
@@ -201,7 +203,7 @@ async function startServer() {
           if (['.xlsx', '.xls', '.csv', '.tsv', '.ods'].includes(extension)) {
             const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
             workbook.SheetNames.forEach(sheetName => {
-              const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 }) as any[][];
+              const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 }) as unknown[][];
               if (rows.length >= 2 && rows[0]?.length >= 2) {
                 result.tables.push({
                   tableId: `table_${fileId}_${sheetName}`,
