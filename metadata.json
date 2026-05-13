@@ -1,0 +1,6 @@
+{
+  "name": "File-to-Wiki System",
+  "description": "Transforms messy folders of mixed file types into clean, organized Wikipedia-style pages with preserved tables and provenance data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

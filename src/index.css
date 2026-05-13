@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Libre Baskerville", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+.docx-table table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+.docx-table td, .docx-table th {
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
+.docx-table th {
+  background-color: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* Custom Scrollbar */
+.CustomScrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.CustomScrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.CustomScrollbar::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}
+.CustomScrollbar:hover::-webkit-scrollbar-thumb {
+  background: #334155;
+}
