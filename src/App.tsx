@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useRef } from "react";
-import { Upload, FileText, Table as TableIcon, FileCheck, AlertCircle, Loader2, ChevronRight, BookOpen, Clock, Tag } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { Upload, FileText, Table as TableIcon, FileCheck, ChevronRight, BookOpen, Clock, Tag, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI, Type } from "@google/genai";
+import DOMPurify from "dompurify";
 
 // Types based on the User Request
 interface TableData {
@@ -49,9 +50,75 @@ export default function App() {
   const [errors, setErrors] = useState<string[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
   const [showQualityReport, setShowQualityReport] = useState(false);
+  const [serverReady, setServerReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragging, setIsDragging] = useState(false);
+
+  // Health check boot sequence
+  React.useEffect(() => {
+    let mounted = true;
+    const checkServer = async () => {
+      try {
+        const res = await fetch("/health");
+        if (res.ok && mounted) {
+          console.log("Backend confirmed healthy.");
+          setServerReady(true);
+        } else if (mounted) {
+          setTimeout(checkServer, 2000);
+        }
+      } catch (e) {
+        if (mounted) setTimeout(checkServer, 2000);
+      }
+    };
+    checkServer();
+    return () => { mounted = false; };
+  }, []);
+
+  const robustFetch = async (url: string, options?: RequestInit, retries = 3) => {
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        
+        if (!text) {
+          if (response.ok) {
+            if (response.status === 204) return null;
+            return {};
+          }
+          throw new Error(`Server returned error ${response.status} with no body.`);
+        }
+
+        try {
+          const data = JSON.parse(text);
+          if (!response.ok) {
+            throw new Error(data.error || `Server error: ${response.status}`);
+          }
+          return data;
+        } catch (e) {
+          if (!response.ok) {
+            // If not OK and NOT JSON, check if it's HTML
+            if (text.includes("<!DOCTYPE html>") || text.includes("<html")) {
+               console.error("Server returned HTML 404/500 instead of JSON:", text.substring(0, 500));
+               throw new Error(`Server returned HTML error ${response.status}. The backend might not be ready or the route is wrong.`);
+            }
+            throw new Error(`Server returned error ${response.status} with invalid body: ${text.substring(0, 100)}`);
+          }
+          throw e; // Rethrow parse error if response was actually OK
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Fetch attempt ${i + 1} failed for ${url}:`, err);
+        if (i < retries - 1) {
+          await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        }
+      }
+    }
+    throw lastError || new Error("Unknown fetch error");
+  };
 
   const handleFileUpload = async (eOrFiles: React.ChangeEvent<HTMLInputElement> | File[]) => {
     let filesArray: FileList | File[] | null = null;
@@ -66,89 +133,89 @@ export default function App() {
     setIsUploading(true);
     setStep(1);
     setErrors([]);
+    setJobProgress(0);
     
-    const formData = new FormData();
-    for (let i = 0; i < filesArray.length; i++) {
-      const file = filesArray[i] as File & { webkitRelativePath?: string };
-      // Explicitly include the path if it's a folder upload
-      const fileName = file.webkitRelativePath || file.name;
-      formData.append("files", file, fileName);
-    }
+    // We'll use batching to avoid timeouts and memory issues
+    const BATCH_SIZE = 15;
+    const totalFiles = filesArray.length;
 
     try {
-      // Step 1: Uploading files
-      setStep(1);
+      // Step 0: Create Job (wait for server if needed)
+      let waitAttempts = 0;
+      while (!serverReady && waitAttempts < 10) {
+        setErrors([`Waiting for backend to initialize (Attempt ${waitAttempts + 1}/10)...`]);
+        await new Promise(r => setTimeout(r, 2000));
+        waitAttempts++;
+      }
+
+      if (!serverReady) {
+        throw new Error("Backend server is not responding. Please wait a moment and try again.");
+      }
       
-      const response = await fetch("/api/process-files", {
+      setErrors([]); // Clear the waiting message
+
+      const { jobId } = await robustFetch("/api/create-job", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ totalFiles })
       });
 
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        throw new Error("Server returned an invalid response (not JSON). The backend might be starting or crashing.");
+      // Step 1: Upload in batches
+      for (let i = 0; i < filesArray.length; i += BATCH_SIZE) {
+        const batch = Array.from(filesArray).slice(i, i + BATCH_SIZE);
+        const batchFormData = new FormData();
+        batch.forEach(file => {
+          const f = file as File & { webkitRelativePath?: string };
+          const fileName = f.webkitRelativePath || f.name;
+          batchFormData.append("files", f, fileName);
+        });
+
+        await robustFetch(`/api/upload-batch/${jobId}`, {
+          method: "POST",
+          body: batchFormData
+        });
+        
+        // Update partial progress for the "Ingestion" label
+        const uploadProgress = Math.round(((i + batch.length) / totalFiles) * 100);
+        setJobProgress(uploadProgress);
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to start processing");
-      }
-
-      const { jobId } = data;
-      
       // Step 2 & 3: Polling for background process
       setStep(2);
       let jobCompleted = false;
+      let finalJobData: any = null;
       
       while (!jobCompleted) {
-        const statusRes = await fetch(`/api/job-status/${jobId}`);
-        const statusText = await statusRes.text();
-        let job;
         try {
-          job = JSON.parse(statusText);
-        } catch (e) {
-          console.error("Invalid status response", statusText);
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          continue;
-        }
-
-        if (!statusRes.ok) throw new Error(job.error || "Failed to track job status");
-        
-        setJobProgress(job.progress);
-        
-        if (job.status === "completed") {
-          setParsedFiles(job.results);
-          if (job.errors && job.errors.length > 0) {
-            setErrors(prev => [...prev, ...job.errors]);
+          const job = await robustFetch(`/api/job-status/${jobId}`);
+          setJobProgress(job.progress);
+          
+          if (job.status === "completed") {
+            setParsedFiles(job.results);
+            if (job.errors && job.errors.length > 0) {
+              setErrors(prev => [...prev, ...job.errors]);
+            }
+            finalJobData = job;
+            jobCompleted = true;
+            setStep(3);
+          } else if (job.status === "failed") {
+            throw new Error("Background processing failed");
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
-          jobCompleted = true;
-          setStep(3); // Wait for Normalization
-        } else if (job.status === "failed") {
-          throw new Error("Background processing failed");
-        } else {
-          // Still processing, wait before next poll
-          await new Promise(resolve => setTimeout(resolve, 1500));
+        } catch (pollErr: any) {
+          console.warn("Polling error, retrying...", pollErr);
+          await new Promise(resolve => setTimeout(resolve, 3000));
         }
       }
 
-      if (parsedFiles.length === 0 && !jobCompleted) {
-         // This block handles the race condition where parsedFiles might not be set yet in the state
-      }
-
-      // Re-fetch to ensure we have results if state update was slow
-      const finalRes = await fetch(`/api/job-status/${jobId}`);
-      const finalJob = await finalRes.json();
-      setParsedFiles(finalJob.results);
-
-      if (!finalJob.results || finalJob.results.length === 0) {
-        throw new Error("No readable files found. Ensure you uploaded supported formats (.xlsx, .pdf, .docx, .png, .txt).");
+      if (!finalJobData || !finalJobData.results || finalJobData.results.length === 0) {
+        throw new Error("No readable files found after processing.");
       }
 
       // Step 4: Analyis (Gemini)
       setStep(4);
-      await analyzeFolderIntent(finalJob.results);
+      await analyzeFolderIntent(finalJobData.results);
 
     } catch (err: any) {
       console.error(err);
@@ -222,16 +289,18 @@ export default function App() {
   // AI initialization helper
   const getAI = () => {
     // @ts-ignore
-    const key = process.env.GEMINI_API_KEY;
+    const key = import.meta.env.VITE_GEMINI_API_KEY;
     if (!key) {
-      console.error("GEMINI_API_KEY is not defined.");
+      console.error("VITE_GEMINI_API_KEY is not defined.");
       return null;
     }
     return new GoogleGenAI({ apiKey: key });
   };
 
   const analyzeFolderIntent = async (files: ParsedFile[]) => {
-    const sampleContent = files.map(f => {
+    // Only sample the first 15 files to avoid hitting token limits or slowing down the UI
+    const sampleFiles = files.slice(0, 15);
+    const sampleContent = sampleFiles.map(f => {
       const tableHeaders = f.tables.map(t => t.data?.[0]?.join(", ") || "extracted table").join(" | ");
       return `File: ${f.fileName}\nText: ${f.text.substring(0, 300)}\nTable Headers: ${tableHeaders}`;
     }).join("\n\n");
@@ -314,12 +383,20 @@ export default function App() {
       });
 
       const names = JSON.parse(response.text) as string[];
-      const grouped: Entity[] = names.map(name => {
-        const belongs = files.filter(f => 
-          f.fileName.toLowerCase().includes(name.toLowerCase()) || 
-          f.text.toLowerCase().includes(name.toLowerCase()) ||
-          f.tables.some(t => t.data?.some(row => row.some(cell => String(cell).toLowerCase().includes(name.toLowerCase()))))
-        );
+      
+      // Optimization: lowercase names for faster matching
+      const entityMatchers = names.map(n => ({ name: n, lower: n.toLowerCase() }));
+
+      const grouped: Entity[] = entityMatchers.map(({ name, lower }) => {
+        const belongs = files.filter(f => {
+          const fileNameMatch = f.fileName.toLowerCase().includes(lower);
+          const textMatch = f.text.toLowerCase().includes(lower);
+          const tableMatch = f.tables.some(t => 
+            t.data?.some(row => row.some(cell => String(cell).toLowerCase().includes(lower)))
+          );
+          return fileNameMatch || textMatch || tableMatch;
+        });
+        
         return {
           entity_name: name,
           files: belongs.map(f => f.fileName),
@@ -438,9 +515,10 @@ export default function App() {
 
   const renderTable = (table: TableData) => {
     if (table.html) {
+      const sanitizedHtml = DOMPurify.sanitize(table.html);
       return (
         <div className="overflow-x-auto my-6 border border-slate-300 rounded-md bg-white shadow-sm">
-          <div dangerouslySetInnerHTML={{ __html: table.html }} className="docx-table" />
+          <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} className="docx-table" />
           <div className="flex items-center gap-2 p-2 bg-slate-50 border-t border-slate-200">
              <FileText size={12} className="text-slate-400" />
              <span className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{table.provenance}</span>
@@ -574,14 +652,25 @@ export default function App() {
             </div>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <div className={`w-2 h-2 rounded-full mr-2 ${serverReady ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} title={serverReady ? "Server Ready" : "Server Starting..."} />
             {step === 0 ? (
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 text-xs font-bold bg-slate-900 text-white rounded shadow-sm hover:bg-slate-800 transition-colors uppercase tracking-widest"
-              >
-                Upload Folder
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!serverReady}
+                  className="px-4 py-2 text-xs font-bold bg-white text-slate-900 border border-slate-300 rounded shadow-sm hover:bg-slate-50 transition-colors uppercase tracking-widest disabled:opacity-50"
+                >
+                  Upload File(s)
+                </button>
+                <button 
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={!serverReady}
+                  className="px-4 py-2 text-xs font-bold bg-slate-900 text-white rounded shadow-sm hover:bg-slate-800 transition-colors uppercase tracking-widest disabled:opacity-50"
+                >
+                  Upload Folder
+                </button>
+              </div>
             ) : (
               <>
                 <button 
@@ -602,11 +691,18 @@ export default function App() {
             <input 
               type="file" 
               multiple 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+              className="hidden" 
+            />
+            <input 
+              type="file" 
+              multiple 
               // @ts-ignore
               webkitdirectory="true" 
               // @ts-ignore
               directory=""
-              ref={fileInputRef} 
+              ref={folderInputRef} 
               onChange={handleFileUpload} 
               className="hidden" 
             />
@@ -640,15 +736,23 @@ export default function App() {
                      Transform unstructured folders into clean, organized, and verifiable Wikipedia-style portals.
                      Preserve tables, identify entities, and maintain zero-loss provenance.
                    </p>
-                   <div className="flex flex-col items-center gap-4">
-                     <button 
-                       onClick={() => fileInputRef.current?.click()}
-                       className="px-10 py-4 bg-slate-900 text-white rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl hover:shadow-2xl"
-                     >
-                       Get Started — Upload Folder
-                     </button>
-                     <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Or Drag and Drop Folder anywhere</p>
-                   </div>
+                    <div className="flex flex-col items-center gap-4">
+                     <div className="flex gap-4">
+                       <button 
+                         onClick={() => fileInputRef.current?.click()}
+                         className="px-8 py-4 bg-white text-slate-900 border border-slate-300 rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-md hover:shadow-lg"
+                       >
+                         Upload File(s)
+                       </button>
+                       <button 
+                         onClick={() => folderInputRef.current?.click()}
+                         className="px-8 py-4 bg-slate-900 text-white rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl hover:shadow-2xl"
+                       >
+                         Upload Folder
+                       </button>
+                     </div>
+                     <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Or Drag and Drop anywhere</p>
+                    </div>
                    <div className="mt-12 flex justify-center gap-8 border-t border-slate-100 pt-8 opacity-40 grayscale group-hover:grayscale-0 transition-all">
                       <div className="flex items-center gap-2"><TableIcon size={16}/> <span className="text-[10px] font-bold">XLSX</span></div>
                       <div className="flex items-center gap-2"><FileText size={16}/> <span className="text-[10px] font-bold">PDF</span></div>
@@ -682,6 +786,14 @@ export default function App() {
                         step === 3 ? "Finalizing Extraction..." :
                         `Step ${step} of 7: Synchronizing Vectors`}
                      </p>
+
+                     {errors.length > 0 && (
+                       <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded text-[10px] font-mono text-red-600 text-left">
+                          <p className="font-bold mb-1 uppercase tracking-tighter text-red-700">Anomalies Detected:</p>
+                          {errors.slice(0, 3).map((err, i) => <div key={i}>• {err}</div>)}
+                          {errors.length > 3 && <div>• and {errors.length - 3} more...</div>}
+                       </div>
+                     )}
                      
                      <div className="space-y-1 text-left bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
                         {[1, 2, 3, 4, 5, 6].map((s) => (
@@ -790,6 +902,7 @@ export default function App() {
                                       className="mt-4 text-[10px] font-bold uppercase tracking-widest text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
                                       onClick={() => {
                                         const win = window.open("", "_blank");
+                                        if (win) win.opener = null;
                                         win?.document.write(`
                                           <style>
                                             body { font-family: "JetBrains Mono", monospace; background: #0f172a; color: #94a3b8; padding: 40px; margin: 0; line-height: 1.6; }
