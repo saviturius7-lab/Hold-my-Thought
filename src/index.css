@@ -26,15 +26,50 @@
 
 /* Custom Scrollbar */
 .CustomScrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 6px;
 }
 .CustomScrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .CustomScrollbar::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #2d6a4f;
   border-radius: 10px;
 }
 .CustomScrollbar:hover::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #1b4332;
 }
+
+@keyframes sway-gentle {
+  0% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(1deg) translateY(-1px); }
+  100% { transform: rotate(-3deg) translateY(0); }
+}
+
+@keyframes sway-moderate {
+  0% { transform: rotate(-1deg) scaleY(1); }
+  50% { transform: rotate(4deg) scaleY(1.02); }
+  100% { transform: rotate(-1deg) scaleY(1); }
+}
+
+@keyframes float-leaf {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  20% { opacity: 0.4; }
+  80% { opacity: 0.4; }
+  100% { transform: translateY(120px) rotate(360deg); opacity: 0; }
+}
+
+.animate-sway-gentle {
+  animation: sway-gentle 6s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-sway-moderate {
+  animation: sway-moderate 8s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-leaf-float {
+  animation: float-leaf 12s linear infinite;
+}
+

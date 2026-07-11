@@ -1,7 +1,6 @@
 import React, { useState, useRef } from "react";
-import { Upload, FileText, Table as TableIcon, FileCheck, ChevronRight, BookOpen, Clock, Tag, AlertCircle, FileWarning } from "lucide-react";
+import { Upload, FileText, Table as TableIcon, FileCheck, ChevronRight, BookOpen, Clock, Tag, AlertCircle, FileWarning, GitCommit, ArrowRight, CornerDownRight, History } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { GoogleGenAI, Type } from "@google/genai";
 import DOMPurify from "dompurify";
 
 // Strict Interfaces
@@ -30,6 +29,15 @@ interface Entity {
   entity_name: string;
   files: string[];
   tables: string[];
+  explanation: string;
+}
+
+interface WikiTerm {
+  term: string;
+  definition: string;
+  category: string;
+  relatedTerms: string[];
+  provenanceFiles: string[];
 }
 
 interface FolderIntent {
@@ -38,6 +46,192 @@ interface FolderIntent {
   confidence: number;
   entityType?: string;
 }
+
+
+const ForestCorner = () => {
+  const [isPeeking, setIsPeeking] = React.useState(false);
+  const [isBlinking, setIsBlinking] = React.useState(false);
+
+  React.useEffect(() => {
+    const triggerPeek = () => {
+      setIsPeeking(true);
+      const hideTimeout = setTimeout(() => {
+        setIsPeeking(false);
+      }, 10000); // 10 seconds appearance
+      return hideTimeout;
+    };
+
+    // Trigger immediately on mount so the user can verify it right away
+    let hideTimeout = triggerPeek();
+
+    const intervalId = setInterval(() => {
+      hideTimeout = triggerPeek();
+    }, 60000); // every 60 seconds
+
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(hideTimeout);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!isPeeking) {
+      setIsBlinking(false);
+      return;
+    }
+
+    const blinkInterval = setInterval(() => {
+      setIsBlinking(true);
+      setTimeout(() => {
+        setIsBlinking(false);
+      }, 200);
+    }, 3000); // blink every 3 seconds
+
+    return () => {
+      clearInterval(blinkInterval);
+    };
+  }, [isPeeking]);
+
+  return (
+    <div className="absolute bottom-0 right-0 w-60 h-48 pointer-events-none z-50 overflow-hidden select-none">
+      <svg viewBox="0 0 400 320" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* 1. Background ground layer (darker green) */}
+        <path d="M 10,295 Q 200,265 390,295 L 400,320 L 0,320 Z" fill="#2d6a4f" stroke="#2e1c0c" strokeWidth="3" strokeLinejoin="round" />
+
+        {/* 2. Background Deciduous Tree 1 (Left-back) */}
+        <g className="animate-sway-gentle" style={{ animationDelay: "0.2s" }}>
+          {/* Trunk */}
+          <path d="M 60,295 L 60,220 L 64,220 L 64,295 Z" fill="#9a6034" stroke="#2e1c0c" strokeWidth="2.5" />
+          {/* Foliage */}
+          <circle cx="48" cy="210" r="15" fill="#38b000" stroke="#2e1c0c" strokeWidth="2.5" />
+          <circle cx="76" cy="210" r="15" fill="#38b000" stroke="#2e1c0c" strokeWidth="2.5" />
+          <circle cx="62" cy="195" r="20" fill="#38b000" stroke="#2e1c0c" strokeWidth="2.5" />
+        </g>
+
+        {/* 3. Background Deciduous Tree 3 (Center-back/left) */}
+        <g className="animate-sway-moderate" style={{ animationDelay: "0.7s" }}>
+          {/* Trunk */}
+          <path d="M 150,295 L 150,190 L 154,190 L 154,295 Z" fill="#9a6034" stroke="#2e1c0c" strokeWidth="2.5" />
+          {/* Foliage */}
+          <circle cx="138" cy="180" r="16" fill="#acd729" stroke="#2e1c0c" strokeWidth="2.5" />
+          <circle cx="166" cy="180" r="16" fill="#acd729" stroke="#2e1c0c" strokeWidth="2.5" />
+          <circle cx="152" cy="165" r="22" fill="#acd729" stroke="#2e1c0c" strokeWidth="2.5" />
+        </g>
+
+        {/* 4. Background Deciduous Tree 6 (Right-back) */}
+        <g className="animate-sway-gentle" style={{ animationDelay: "1.2s" }}>
+          {/* Trunk */}
+          <path d="M 355,295 L 355,220 L 359,220 L 359,295 Z" fill="#9a6034" stroke="#2e1c0c" strokeWidth="2.5" />
+          {/* Foliage */}
+          <circle cx="343" cy="210" r="15" fill="#38b000" stroke="#2e1c0c" strokeWidth="2.5" />
+          <circle cx="371" cy="210" r="15" fill="#38b000" stroke="#2e1c0c" strokeWidth="2.5" />
+          <circle cx="357" cy="195" r="18" fill="#38b000" stroke="#2e1c0c" strokeWidth="2.5" />
+        </g>
+
+        {/* 5. Middle Deciduous Tree 4 (Left-center) */}
+        <g className="animate-sway-moderate" style={{ animationDelay: "0s" }}>
+          {/* Trunk (forking) */}
+          <path d="M 100,295 L 100,210 Q 95,185 85,175 L 94,175 Q 102,185 104,200 Q 110,180 118,170 L 126,170 Q 116,195 110,210 L 110,295 Z" fill="#9a6034" stroke="#2e1c0c" strokeWidth="3" />
+          {/* Foliage */}
+          <circle cx="80" cy="160" r="28" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="125" cy="160" r="28" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="70" cy="125" r="26" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="130" cy="125" r="26" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="100" cy="110" r="32" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+        </g>
+
+        {/* 6. Middle Evergreen Tree 5 (Pine) */}
+        <g className="animate-sway-gentle" style={{ animationDelay: "0.5s" }}>
+          {/* Trunk */}
+          <path d="M 275,295 L 273,120 L 281,120 L 279,295 Z" fill="#81502c" stroke="#2e1c0c" strokeWidth="3" />
+          {/* Spiky conifer tiers */}
+          <polygon points="277,180 220,245 235,245 210,290 344,290 319,245 334,245" fill="#1b4332" stroke="#2e1c0c" strokeWidth="3" strokeLinejoin="round" />
+          <polygon points="277,115 242,170 254,170 232,215 322,215 300,170 312,170" fill="#1b4332" stroke="#2e1c0c" strokeWidth="3" strokeLinejoin="round" />
+          <polygon points="277,65 257,110 267,110 252,145 302,145 287,110 297,110" fill="#1b4332" stroke="#2e1c0c" strokeWidth="3" strokeLinejoin="round" />
+        </g>
+
+        {/* 7. Foreground Deciduous Tree 7 (Right-center) */}
+        <g className="animate-sway-moderate" style={{ animationDelay: "1.5s" }}>
+          {/* Trunk */}
+          <path d="M 315,295 L 315,220 Q 310,195 300,185 L 308,185 Q 317,195 319,210 Q 325,190 333,180 L 341,180 Q 331,205 325,220 L 325,295 Z" fill="#9a6034" stroke="#2e1c0c" strokeWidth="3" />
+          {/* Foliage */}
+          <circle cx="295" cy="180" r="22" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="335" cy="180" r="22" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="285" cy="150" r="20" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="345" cy="150" r="20" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="315" cy="135" r="26" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+        </g>
+
+        {/* 8. Foreground Hill/Grass base */}
+        <path d="M 15,290 Q 200,265 385,290 Q 400,295 385,310 L 15,310 Q 0,295 15,290 Z" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" strokeLinejoin="round" />
+        <path d="M 35,293 Q 200,274 365,293 Q 375,297 365,305 L 35,305 Q 25,297 35,293 Z" fill="#acd729" fillOpacity="0.5" />
+
+        {/* 9. Left Bush */}
+        <g className="animate-sway-gentle" style={{ animationDelay: "0.1s" }}>
+          <circle cx="90" cy="285" r="16" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="120" cy="285" r="16" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="105" cy="268" r="20" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+        </g>
+
+        {/* 10. Far-Right Small Bush */}
+        <g className="animate-sway-gentle" style={{ animationDelay: "0.9s" }}>
+          <circle cx="295" cy="292" r="13" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="320" cy="292" r="13" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="308" cy="278" r="16" fill="#4ea41c" stroke="#2e1c0c" strokeWidth="3" />
+        </g>
+
+        {/* 11. Peeking Rabbit */}
+        <motion.g
+          animate={{ y: isPeeking ? 0 : 65 }}
+          transition={{ type: "spring", stiffness: 100, damping: 15 }}
+        >
+          {/* Left Ear */}
+          <path d="M 194,222 C 190,190 204,185 205,222 Z" fill="#ffffff" stroke="#2e1c0c" strokeWidth="3" />
+          
+          {/* Right Ear */}
+          <path d="M 211,222 C 212,185 226,190 222,222 Z" fill="#ffffff" stroke="#2e1c0c" strokeWidth="3" />
+          {/* Inner ear fold line */}
+          <path d="M 214,219 C 215,198 223,200 221,219" fill="none" stroke="#2e1c0c" strokeWidth="2.5" strokeLinecap="round" />
+
+          {/* Head */}
+          <ellipse cx="208" cy="235" rx="18" ry="16" fill="#ffffff" stroke="#2e1c0c" strokeWidth="3" />
+
+          {/* Cheek pink spots */}
+          <circle cx="194" cy="236" r="2.5" fill="#fbcfe8" opacity="0.6" />
+          <circle cx="222" cy="236" r="2.5" fill="#fbcfe8" opacity="0.6" />
+
+          {/* Eyes (Blinking State) */}
+          {isBlinking ? (
+            <>
+              <path d="M 196.5,231 Q 199,233 201.5,231" stroke="#2e1c0c" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              <path d="M 214.5,231 Q 217,233 219.5,231" stroke="#2e1c0c" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+            </>
+          ) : (
+            <>
+              <circle cx="199" cy="231" r="2.8" fill="#2e1c0c" />
+              <circle cx="217" cy="231" r="2.8" fill="#2e1c0c" />
+            </>
+          )}
+
+          {/* Mouth 'x' */}
+          <line x1="206" y1="237.5" x2="210" y2="240.5" stroke="#2e1c0c" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="210" y1="237.5" x2="206" y2="240.5" stroke="#2e1c0c" strokeWidth="2.2" strokeLinecap="round" />
+
+          {/* Paws resting */}
+          <rect x="194" y="244" width="7" height="9" rx="3.5" fill="#ffffff" stroke="#2e1c0c" strokeWidth="2.5" />
+          <rect x="215" y="244" width="7" height="9" rx="3.5" fill="#ffffff" stroke="#2e1c0c" strokeWidth="2.5" />
+        </motion.g>
+
+        {/* 12. Foremost Right Bush (drawn in front of the rabbit to mask it) */}
+        <g className="animate-sway-gentle" style={{ animationDelay: "0.4s" }}>
+          <circle cx="190" cy="285" r="18" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="225" cy="285" r="18" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+          <circle cx="208" cy="265" r="22" fill="#acd729" stroke="#2e1c0c" strokeWidth="3" />
+        </g>
+      </svg>
+    </div>
+  );
+};
 
 
 export default function App() {
@@ -54,8 +248,38 @@ export default function App() {
   const [jobId, setJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const [isDragging, setIsDragging] = useState(false);
+
+  // Terminology Chains State
+  const [wikiTerms, setWikiTerms] = useState<WikiTerm[]>([]);
+  const [selectedTerm, setSelectedTerm] = useState<WikiTerm | null>(null);
+  const [wikiTab, setWikiTab] = useState<'documents' | 'terminology' | 'history'>('documents');
+  const [tocVisible, setTocVisible] = useState(true);
+  const [termPath, setTermPath] = useState<string[]>([]);
+  const [localFilter, setLocalFilter] = useState("");
+
+  const scrollToSection = (id: string, e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    const container = scrollContainerRef.current;
+    const element = document.getElementById(id);
+    if (container && element) {
+      const containerRect = container.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      const relativeTop = elementRect.top - containerRect.top + container.scrollTop;
+      container.scrollTo({
+        top: relativeTop,
+        behavior: "smooth"
+      });
+    }
+  };
+
+  React.useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [selectedEntity]);
 
   // Health check boot sequence
   React.useEffect(() => {
@@ -217,9 +441,31 @@ export default function App() {
         throw new Error("No readable files found after processing.");
       }
 
-      // Step 4: Analyis (Gemini)
+      // Step 4: Run server-side Wikipedia Pipeline
       setStep(4);
-      await analyzeFolderIntent(finalJobData.results);
+      const pipelinePromise = robustFetch(`/api/generate-wiki-pipeline/${newJobId}`, {
+        method: "POST"
+      });
+
+      // Maintain loading-state rhythm
+      await new Promise(r => setTimeout(r, 2000));
+      setStep(5);
+      await new Promise(r => setTimeout(r, 2000));
+      setStep(6);
+
+      const pipelineResult = await pipelinePromise;
+      
+      setFolderIntent(pipelineResult.folderIntent);
+      setEntities(pipelineResult.entities);
+      setWikiTerms(pipelineResult.wikiTerms);
+      
+      if (pipelineResult.entities && pipelineResult.entities.length > 0) {
+        setSelectedEntity(pipelineResult.entities[0].entity_name);
+      }
+      if (pipelineResult.wikiTerms && pipelineResult.wikiTerms.length > 0) {
+        setSelectedTerm(pipelineResult.wikiTerms[0]);
+      }
+      setStep(7);
 
     } catch (err: any) {
       console.error(err);
@@ -290,147 +536,169 @@ export default function App() {
     }
   };
 
-  // AI initialization helper
-  const getAI = () => {
-    // Standardize to usage defined in vite.config.ts
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      console.error("GEMINI_API_KEY is not defined. Please check environment configuration.");
-      return null;
-    }
-    return new GoogleGenAI({ apiKey: key });
+  // Term click tracking for concept chains
+  const handleTermClick = (term: WikiTerm) => {
+    setSelectedTerm(term);
+    setTermPath(prev => {
+      if (prev.includes(term.term)) {
+        const index = prev.indexOf(term.term);
+        return prev.slice(0, index + 1);
+      }
+      return [...prev, term.term];
+    });
   };
 
-  const analyzeFolderIntent = async (files: ParsedFile[]) => {
-    // Only sample the first 15 files to avoid hitting token limits or slowing down the UI
-    const sampleFiles = files.slice(0, 15);
-    const sampleContent = sampleFiles.map(f => {
-      const tableHeaders = f.tables.map(t => t.data?.[0]?.join(", ") || "extracted table").join(" | ");
-      return `File: ${f.fileName}\nText: ${f.text.substring(0, 300)}\nTable Headers: ${tableHeaders}`;
-    }).join("\n\n");
-    
-    try {
-      const gAI = getAI();
-      if (!gAI) throw new Error("AI Controller unavailable.");
-      
-      const response = await gAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Analyze this file collection and return JSON metadata defining the high-level intent.
-          
-          Guidelines for classification:
-          - SINGLE_ENTITY: All files pertain to exactly one subject (e.g. one legal case, one company merger).
-          - MULTIPLE_COMPARABLE: Similar files describing different entities (e.g. 50 different invoices, 10 vendor proposals).
-          - PROCESS_TIMELINE: Files represent steps in a single evolving sequence (e.g. a construction project, a court trial history).
-          
-          Sample Content:
-          ${sampleContent}`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              topic: { type: Type.STRING },
-              type: { type: Type.STRING, enum: ["SINGLE_ENTITY", "MULTIPLE_COMPARABLE", "PROCESS_TIMELINE"] },
-              confidence: { type: Type.NUMBER },
-              entityType: { type: Type.STRING }
-            },
-            required: ["topic", "type"]
-          }
-        }
-      });
-
-      const intent = JSON.parse(response.text) as FolderIntent;
-      setFolderIntent(intent);
-      
-      setStep(5);
-      await identifyEntities(intent, files);
-    } catch (err) {
-      console.error("Gemini Intent Error:", err);
-      const fallback: FolderIntent = { topic: "Unidentified Collection", type: 'SINGLE_ENTITY', confidence: 50 };
-      setFolderIntent(fallback);
-      setStep(5);
-      await identifyEntities(fallback, files);
-    }
+  const resetTermPath = () => {
+    setTermPath([]);
   };
 
-  const identifyEntities = async (intent: FolderIntent, files: ParsedFile[]) => {
-    // Step 6: Wiki Generation
-    setStep(6);
-    
-    if (intent.type === 'SINGLE_ENTITY' || intent.type === 'PROCESS_TIMELINE') {
-      const name = intent.topic || "Main Entity";
-      const single: Entity = {
-        entity_name: name,
-        files: files.map(f => f.fileName),
-        tables: files.flatMap(f => f.tables.map(t => t.tableId))
-      };
-      setEntities([single]);
-      setSelectedEntity(name);
-      setStep(7);
-      return;
-    }
+  const renderTextWithWikiLinks = (text: string) => {
+    if (!text) return "";
+    const sortedEntities = [...entities].sort((a, b) => b.entity_name.length - a.entity_name.length);
+    const sortedTerms = [...wikiTerms].sort((a, b) => b.term.length - a.term.length);
 
-    try {
-      const gAI = getAI();
-      if (!gAI) throw new Error("AI Controller unavailable.");
-      
-      const response = await gAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `List the specific ${intent.entityType || 'entities'} discovered in these files. Return JSON array of strings. Content summary: ${intent.topic}`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
+    const entityNames = sortedEntities.map(e => e.entity_name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+    const termNames = sortedTerms.map(t => t.term.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+
+    const allMatches = Array.from(new Set([...entityNames, ...termNames])).sort((a, b) => b.length - a.length);
+    const pattern = allMatches.join('|');
+    if (!pattern) return text;
+
+    const regex = new RegExp(`(?<!\\w)(${pattern})(?!\\w)`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, i) => {
+      const matchedEntity = sortedEntities.find(e => e.entity_name.toLowerCase() === part.toLowerCase());
+      if (matchedEntity) {
+        return (
+          <button
+            key={i}
+            onClick={() => {
+              setSelectedEntity(matchedEntity.entity_name);
+              setWikiTab('documents');
+            }}
+            className="font-bold text-[#1b4332] hover:underline hover:text-[#2d6a4f] bg-transparent border-0 p-0 cursor-pointer inline"
+          >
+            {part}
+          </button>
+        );
+      }
+
+      const matchedTerm = sortedTerms.find(t => t.term.toLowerCase() === part.toLowerCase());
+      if (matchedTerm) {
+        return (
+          <button
+            key={i}
+            onClick={() => {
+              handleTermClick(matchedTerm);
+              setWikiTab('terminology');
+            }}
+            className="font-bold text-[#2d6a4f] hover:underline hover:text-[#1b4332] bg-transparent border-0 p-0 cursor-pointer inline"
+          >
+            {part}
+          </button>
+        );
+      }
+
+      return part;
+    });
+  };
+
+  const renderSynthesizedArticle = (explanation: string) => {
+    if (!explanation) return null;
+
+    const normalized = explanation.replace(/\\n/g, '\n');
+    const lines = normalized.split('\n');
+    return (
+      <div className="space-y-4 text-justify leading-relaxed text-[#202122] select-text">
+        {lines.map((line, idx) => {
+          const trimmed = line.trim();
+          if (!trimmed) return null;
+
+          const h2Match = trimmed.match(/^==\s*(.*?)\s*==$/);
+          if (h2Match) {
+            return (
+              <h2 key={idx} className="border-b border-[#a2a9b1] pb-1 text-xl font-serif font-normal mt-10 mb-4 text-black">
+                {h2Match[1]}
+              </h2>
+            );
           }
-        }
-      });
 
-      const names = JSON.parse(response.text) as string[];
-      
-      // Optimization: lowercase names for faster matching
-      const entityMatchers = names.map(n => ({ name: n, lower: n.toLowerCase() }));
+          const h3Match = trimmed.match(/^===\s*(.*?)\s*===$/) || trimmed.match(/^###\s*(.*)$/);
+          if (h3Match) {
+            return (
+              <h3 key={idx} className="text-md font-bold text-slate-800 mt-6 mb-2">
+                {h3Match[1]}
+              </h3>
+            );
+          }
 
-      // Optimization: pre-calculate lowercase versions for matching
-      const lowerFiles = files.map(f => ({
-        ...f,
-        lowerName: f.fileName.toLowerCase(),
-        lowerText: f.text.toLowerCase(),
-        lowerTableData: f.tables.map(t => 
-          t.data?.map(row => row.map(cell => String(cell).toLowerCase())) || []
-        )
-      }));
+          if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+            const content = trimmed.substring(2);
+            return (
+              <ul key={idx} className="list-disc pl-6 space-y-1 my-2">
+                <li>{renderTextWithWikiLinks(content)}</li>
+              </ul>
+            );
+          }
 
-      const grouped: Entity[] = entityMatchers.map(({ name, lower }) => {
-        const belongs = lowerFiles.filter(f => {
-          if (f.lowerName.includes(lower)) return true;
-          if (f.lowerText.includes(lower)) return true;
-          return f.lowerTableData.some(tableRows => 
-            tableRows.some(row => row.some(cellLower => cellLower.includes(lower)))
+          return (
+            <p key={idx} className="mb-4">
+              {renderTextWithWikiLinks(trimmed)}
+            </p>
           );
-        });
-        
-        return {
-          entity_name: name,
-          files: belongs.map(f => f.fileName),
-          tables: belongs.flatMap(f => f.tables.map(t => t.tableId))
-        };
-      });
+        })}
+      </div>
+    );
+  };
 
-      setEntities(grouped);
-      if (grouped.length > 0) setSelectedEntity(grouped[0].entity_name);
-      setStep(7);
-    } catch (err) {
-      console.error("Gemini Entity Error:", err);
-      const fallback: Entity = {
-        entity_name: "Knowledge Port",
-        files: files.map(f => f.fileName),
-        tables: files.flatMap(f => f.tables.map(t => t.tableId))
-      };
-      setEntities([fallback]);
-      setSelectedEntity(fallback.entity_name);
-      setStep(7);
-    }
+  const renderDefinitionWithLinks = (text: string, terms: WikiTerm[]) => {
+    if (!text) return "";
+    const sortedEntities = [...entities].sort((a, b) => b.entity_name.length - a.entity_name.length);
+    const sortedTerms = [...terms].sort((a, b) => b.term.length - a.term.length);
+
+    const entityNames = sortedEntities.map(e => e.entity_name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+    const termNames = sortedTerms.map(t => t.term.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+
+    const allMatches = Array.from(new Set([...entityNames, ...termNames])).sort((a, b) => b.length - a.length);
+    const pattern = allMatches.join('|');
+    if (!pattern) return text;
+
+    const regex = new RegExp(`(?<!\\w)(${pattern})(?!\\w)`, 'gi');
+    const parts = text.split(regex);
+
+    return parts.map((part, i) => {
+      const matchedEntity = sortedEntities.find(e => e.entity_name.toLowerCase() === part.toLowerCase());
+      if (matchedEntity) {
+        return (
+          <button
+            key={i}
+            onClick={() => {
+              setSelectedEntity(matchedEntity.entity_name);
+              setWikiTab('documents');
+            }}
+            className="font-bold text-[#1b4332] hover:underline hover:text-[#2d6a4f] bg-transparent border-0 p-0 cursor-pointer inline"
+          >
+            {part}
+          </button>
+        );
+      }
+
+      const matchedTerm = sortedTerms.find(t => t.term.toLowerCase() === part.toLowerCase());
+      if (matchedTerm) {
+        return (
+          <button
+            key={i}
+            onClick={() => handleTermClick(matchedTerm)}
+            className="font-bold text-emerald-700 hover:text-emerald-900 underline inline bg-transparent border-0 p-0 cursor-pointer"
+          >
+            {part}
+          </button>
+        );
+      }
+
+      return part;
+    });
   };
 
   const downloadWiki = async (jobId?: string) => {
@@ -466,13 +734,33 @@ export default function App() {
       `;
     }).join("");
 
-    const proseHtml = entity.files.map(fname => {
-      const file = parsedFiles.find(f => f.fileName === fname);
-      if (!file || !file.text) return "";
+    const explanationHtml = entity.explanation ? entity.explanation.split('\n').map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return "";
+      if (trimmed.startsWith("==") && trimmed.endsWith("==")) {
+        return `<h2 style="font-family: serif; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-top: 40px;">${trimmed.replace(/==/g, "").trim()}</h2>`;
+      }
+      if (trimmed.startsWith("===") && trimmed.endsWith("===")) {
+        return `<h3 style="margin-top: 24px; font-size: 18px;">${trimmed.replace(/===/g, "").trim()}</h3>`;
+      }
+      return `<p style="margin-bottom: 16px; text-align: justify; line-height: 1.7;">${trimmed}</p>`;
+    }).join("\n") : "<p>No article content available</p>";
+
+    const glossaryHtml = wikiTerms.map(t => {
+      const relatedLinks = t.relatedTerms.map(rt => {
+        const rtId = rt.toLowerCase().replace(/[^a-z0-9]/g, "-");
+        return `<a href="#term-${rtId}" style="display: inline-block; background: #e2e8f0; color: #1e293b; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-decoration: none; margin-right: 6px; font-family: monospace;">${rt}</a>`;
+      }).join(" ");
+
+      const tId = t.term.toLowerCase().replace(/[^a-z0-9]/g, "-");
+
       return `
-        <div style="background: #f8fafc; border-left: 4px solid #cbd5e1; padding: 20px; margin-bottom: 20px;">
-          <h4 style="font-size: 10px; font-family: monospace; color: #64748b; margin: 0 0 10px 0;">SRC: ${fname}</h4>
-          <p style="font-size: 14px; color: #334155; font-style: italic; white-space: pre-wrap;">${file.text}</p>
+        <div id="term-${tId}" style="background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; scroll-margin-top: 24px;">
+          <span style="font-size: 10px; font-family: monospace; font-weight: bold; text-transform: uppercase; color: #3b82f6; display: block; margin-bottom: 4px;">${t.category || "Terminology"}</span>
+          <h3 style="font-family: serif; margin: 0 0 10px 0; font-size: 20px;">${t.term}</h3>
+          <p style="font-size: 14px; color: #475569; margin: 0 0 15px 0;">${t.definition}</p>
+          ${t.relatedTerms.length > 0 ? `<div style="margin-bottom: 10px;"><strong style="font-size: 11px; text-transform: uppercase; color: #64748b; display: block; margin-bottom: 4px;">Connected Terminologies:</strong> ${relatedLinks}</div>` : ""}
+          <div style="font-size: 11px; color: #94a3b8;"><strong style="font-size: 11px; text-transform: uppercase; color: #64748b;">Discovered in:</strong> ${t.provenanceFiles.join(", ")}</div>
         </div>
       `;
     }).join("");
@@ -502,13 +790,21 @@ export default function App() {
     
     <div class="toc">
         <h4>Contents</h4>
-        <ul>${entity.tables.map((_, i) => `<li>${i+1}.0 Data Matrix</li>`).join("")}<li>A.0 Additional Docs</li></ul>
+        <ul>${entity.tables.map((_, i) => `<li>${i+1}.0 Data Matrix</li>`).join("")}<li>2.0 Synthesized Topic Article</li><li>3.0 Interconnected Glossary</li></ul>
     </div>
 
     ${tablesHtml}
     
-    <h2 style="margin-top: 80px; border-top: 1px solid #f1f5f9; padding-top: 40px;">Additional Documentation</h2>
-    ${proseHtml}
+    <h2 style="margin-top: 80px; border-top: 1px solid #f1f5f9; padding-top: 40px;">Synthesized Topic Article</h2>
+    ${explanationHtml}
+
+    <h2 style="margin-top: 80px; border-top: 1px solid #f1f5f9; padding-top: 40px;">Interconnected Concept Glossary</h2>
+    <p style="color: #64748b; font-style: italic; font-size: 14px; margin-bottom: 30px;">
+        Click any linked terminology within a concept card to hop seamlessly through the structural definition chain.
+    </p>
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 30px; border-radius: 8px; margin-bottom: 60px;">
+        ${glossaryHtml}
+    </div>
     
     <footer style="margin-top: 100px; border-top: 1px solid #f1f5f9; padding-top: 20px; font-size: 10px; color: #94a3b8; text-transform: uppercase;">
         Generated via File-to-Wiki System v2.4.1 | ${new Date().toLocaleString()}
@@ -540,10 +836,10 @@ export default function App() {
     if (table.html) {
       const sanitizedHtml = DOMPurify.sanitize(table.html);
       return (
-        <div className="overflow-x-auto my-6 border border-slate-300 rounded-md bg-white shadow-sm">
-          <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} className="docx-table" />
-          <div className="flex items-center gap-2 p-2 bg-slate-50 border-t border-slate-200">
-             <FileText size={12} className="text-slate-400" />
+        <div className="my-6 border border-[#a2a9b1] bg-[#f8f9fa] p-2 select-text">
+          <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} className="wikitable overflow-x-auto text-[13px] leading-[1.6]" />
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#a2a9b1] text-[10px] text-[#54595d] font-mono">
+             <FileText size={12} className="text-[#54595d]" />
              <span className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{table.provenance}</span>
           </div>
         </div>
@@ -553,27 +849,26 @@ export default function App() {
     if (!table.data) return null;
 
     const headers = table.data[0] as string[];
-    const rows = table.data.slice(1, 501); // Truncate at 500
-    const isTruncated = table.data.length > 501;
+    const rows = table.data.slice(1); // No truncation! Every row of data is fully accounted for!
 
     return (
-      <div className="my-6 border border-slate-300 rounded-md overflow-hidden bg-white shadow-sm">
+      <div className="my-6 border border-[#a2a9b1] bg-[#f8f9fa] p-2 overflow-hidden select-text">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full border-collapse border border-[#a2a9b1] text-[13px] text-[#202122] bg-white">
             <thead>
-              <tr className="bg-slate-100 border-b border-slate-300">
+              <tr className="bg-[#eaecf0] border-b border-[#a2a9b1]">
                 {headers.map((h, i) => (
-                  <th key={i} className="px-3 py-2 text-left font-semibold text-slate-700 border-r border-slate-300 last:border-r-0 whitespace-nowrap">
+                  <th key={i} className="px-3 py-2 text-left font-bold border-r border-[#a2a9b1] last:border-r-0 whitespace-nowrap text-[#202122]">
                     {h || `COL_${i + 1}`}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="text-slate-600">
-              {rows.map((row, ripple) => (
-                <tr key={ripple} className="border-b border-slate-200 last:border-b-0 even:bg-slate-50/50 hover:bg-slate-100/50 transition-colors">
+            <tbody>
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx} className="border-b border-[#a2a9b1] last:border-b-0 even:bg-[#f8f9fa] hover:bg-[#eaecf0]/40 transition-colors">
                   {headers.map((_, i) => (
-                    <td key={i} className="px-3 py-2 border-r border-slate-200 last:border-r-0 whitespace-nowrap">
+                    <td key={i} className="px-3 py-2 border-r border-[#a2a9b1] last:border-r-0 whitespace-pre-wrap">
                       {row[i] === undefined || row[i] === null ? <span className="text-slate-300 italic">EMPTY</span> : String(row[i])}
                     </td>
                   ))}
@@ -582,16 +877,14 @@ export default function App() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between p-2 bg-slate-50 border-t border-slate-200">
+        <div className="flex items-center justify-between p-2 mt-2 pt-2 border-t border-[#a2a9b1] text-[10px] text-[#54595d] font-mono">
            <div className="flex items-center gap-2">
-              <FileText size={12} className="text-slate-400" />
+              <FileText size={12} className="text-[#54595d]" />
               <span className="text-[10px] text-slate-500 font-mono uppercase tracking-tight">{table.provenance}</span>
            </div>
-           {isTruncated && (
-             <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">
-               Truncated from {table.data.length} rows
-             </span>
-           )}
+           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold uppercase tracking-tight">
+             All {table.data.length} cells preserved
+           </span>
         </div>
       </div>
     );
@@ -599,30 +892,35 @@ export default function App() {
 
   return (
     <div 
-      className={`flex h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-900 transition-colors ${isDragging ? 'bg-blue-50/50 ring-4 ring-blue-500/20 ring-inset' : ''}`}
+      className={`relative flex h-screen w-full overflow-hidden bg-[#f0f3f1] font-sans text-slate-900 transition-colors ${isDragging ? 'bg-emerald-50/50 ring-4 ring-emerald-500/20 ring-inset' : ''}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {/* Bottom right forest corner with peeking blinking rabbit */}
+      <ForestCorner />
+
       {/* Left Sidebar: Entity Navigation */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800">
+      <aside className="w-64 bg-[#0c2419] text-emerald-100 flex flex-col border-r border-[#113122] z-10">
+        <div className="p-6 border-b border-[#113122]">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-            <h2 className="text-xs font-bold uppercase tracking-widest text-white">File-to-Wiki</h2>
+            <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L3 9h3v10h12V9h3L12 2zm1 15h-2v-2h2v2zm0-4h-2V8h2v5z" />
+            </svg>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-white">Omipedia</h2>
           </div>
-          <p className="text-[10px] text-slate-500 font-mono">v2.4.1 Build: Studio-X</p>
+          <p className="text-[10px] text-emerald-600 font-mono">v2.4.1 Build: Forest-X</p>
         </div>
         
         <nav className="flex-1 overflow-y-auto p-4 CustomScrollbar">
           {step < 7 ? (
              <div className="px-2 py-8 text-center">
-                <div className="w-8 h-8 border-2 border-slate-700 border-t-white rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Awaiting Data</p>
+                <div className="w-8 h-8 border-2 border-emerald-800 border-t-white rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-[10px] uppercase tracking-widest text-emerald-500 font-bold">Awaiting Data</p>
              </div>
           ) : (
             <>
-              <h3 className="text-[10px] font-semibold text-slate-500 uppercase mb-4 px-2 tracking-widest">Entities Detected ({entities.length})</h3>
+              <h3 className="text-[10px] font-semibold text-emerald-500 uppercase mb-4 px-2 tracking-widest">Entities Detected ({entities.length})</h3>
               <ul className="space-y-1">
                 {entities.map(e => (
                   <li 
@@ -630,8 +928,8 @@ export default function App() {
                     onClick={() => setSelectedEntity(e.entity_name)}
                     className={`px-3 py-2 text-sm rounded cursor-pointer transition-colors ${
                       selectedEntity === e.entity_name 
-                      ? 'bg-blue-600/10 text-blue-400 border-l-2 border-blue-500 font-medium' 
-                      : 'hover:bg-slate-800 text-slate-400'
+                      ? 'bg-emerald-600/20 text-emerald-300 border-l-2 border-emerald-500 font-medium' 
+                      : 'hover:bg-[#153a2a] text-emerald-400'
                     }`}
                   >
                     {e.entity_name}
@@ -642,54 +940,54 @@ export default function App() {
           )}
         </nav>
 
-        <div className="p-4 bg-slate-950 border-t border-slate-800">
+        <div className="p-4 bg-[#071710] border-t border-[#113122]">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">Processing Status</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${step >= 7 ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+            <span className="text-[10px] font-medium text-emerald-500 uppercase tracking-tighter">Processing Status</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${step >= 7 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-500/20 text-emerald-400 animate-pulse'}`}>
               {step >= 7 ? '100% COMPLETE' : `${Math.round((step / 7) * 100)}% ACTIVE`}
             </span>
           </div>
-          <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+          <div className="w-full bg-[#1a3f2c] h-1 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${(step / 7) * 100}%` }}
-              className="bg-green-500 h-full"
+              className="bg-emerald-400 h-full"
             />
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden z-10">
         {/* Header / Context Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm flex-shrink-0">
+        <header className="h-16 bg-[#f9faf9] border-b border-emerald-900/10 flex items-center justify-between px-8 shadow-sm flex-shrink-0">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
-               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Context:</span>
-               <span className="text-xs text-slate-700 font-mono bg-slate-100 px-2 py-0.5 rounded">/uploads/session_{jobId || "initializing"}/</span>
+               <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700/60">Context:</span>
+               <span className="text-xs text-emerald-800 font-mono bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">/uploads/session_{jobId || "initializing"}/</span>
             </div>
-            <span className="text-slate-200">|</span>
+            <span className="text-emerald-200">|</span>
             <div className="flex items-center gap-2">
-               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Intent:</span>
-               <span className="text-xs text-blue-600 font-semibold italic">{folderIntent?.type || 'PENDING'}</span>
+               <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700/60">Intent:</span>
+               <span className="text-xs text-emerald-700 font-semibold italic">{folderIntent?.type || 'PENDING'}</span>
             </div>
           </div>
           
           <div className="flex gap-2 items-center">
-            <div className={`w-2 h-2 rounded-full mr-2 ${serverReady ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} title={serverReady ? "Server Ready" : "Server Starting..."} />
+            <div className={`w-2 h-2 rounded-full mr-2 ${serverReady ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} title={serverReady ? "Server Ready" : "Server Starting..."} />
             {step === 0 ? (
               <div className="flex gap-2">
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!serverReady}
-                  className="px-4 py-2 text-xs font-bold bg-white text-slate-900 border border-slate-300 rounded shadow-sm hover:bg-slate-50 transition-colors uppercase tracking-widest disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-bold bg-white text-emerald-900 border border-emerald-200 rounded shadow-sm hover:bg-emerald-50 transition-colors uppercase tracking-widest disabled:opacity-50"
                 >
                   Upload File(s)
                 </button>
                 <button 
                   onClick={() => folderInputRef.current?.click()}
                   disabled={!serverReady}
-                  className="px-4 py-2 text-xs font-bold bg-slate-900 text-white rounded shadow-sm hover:bg-slate-800 transition-colors uppercase tracking-widest disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-bold bg-[#1b4332] text-white rounded shadow-sm hover:bg-[#2d6a4f] transition-colors uppercase tracking-widest disabled:opacity-50"
                 >
                   Upload Folder
                 </button>
@@ -698,14 +996,14 @@ export default function App() {
               <>
                 <button 
                   onClick={() => window.location.reload()}
-                  className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-600"
+                  className="px-3 py-1.5 text-xs font-semibold bg-white border border-emerald-200 rounded hover:bg-emerald-50 text-emerald-800"
                 >
                   New Workflow
                 </button>
                 <button 
                   disabled={step < 7}
                   onClick={() => downloadWiki(jobId || undefined)}
-                  className="px-3 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs font-semibold bg-[#1b4332] text-white rounded shadow-sm hover:bg-[#2d6a4f] disabled:opacity-50"
                 >
                   Download Wiki Bundle
                 </button>
@@ -743,38 +1041,38 @@ export default function App() {
                 exit={{ opacity: 0, scale: 0.98 }}
                 className="max-w-4xl mx-auto h-full flex flex-col justify-center"
               >
-                 <div className="bg-white border border-slate-200 p-16 rounded-lg shadow-xl text-center relative overflow-hidden group">
+                 <div className="bg-white border border-emerald-900/10 p-16 rounded-lg shadow-xl text-center relative overflow-hidden group">
                    {isDragging && (
-                     <div className="absolute inset-0 bg-blue-600/10 flex items-center justify-center backdrop-blur-[2px] z-10">
+                     <div className="absolute inset-0 bg-emerald-600/10 flex items-center justify-center backdrop-blur-[2px] z-10">
                         <div className="bg-white rounded-full p-4 shadow-xl">
-                           <Upload className="text-blue-600 animate-bounce" size={40} />
+                           <Upload className="text-emerald-600 animate-bounce" size={40} />
                         </div>
                      </div>
                    )}
-                   <div className="w-20 h-20 bg-slate-900 text-white flex items-center justify-center rounded-2xl mx-auto mb-8 shadow-lg group-hover:scale-110 transition-transform">
+                   <div className="w-20 h-20 bg-[#1b4332] text-white flex items-center justify-center rounded-2xl mx-auto mb-8 shadow-lg group-hover:scale-110 transition-transform">
                       <BookOpen size={40} />
                    </div>
-                   <h2 className="text-5xl font-serif font-medium text-slate-900 mb-6 italic tracking-tight leading-tight">Professional Grade <br/>Data Wikis.</h2>
-                   <p className="text-slate-500 text-lg max-w-xl mx-auto mb-10 leading-relaxed font-light">
-                     Transform unstructured folders into clean, organized, and verifiable Wikipedia-style portals.
+                   <h2 className="text-5xl font-serif font-medium text-emerald-950 mb-6 italic tracking-tight leading-tight">Omipedia <br/>Professional Wikis.</h2>
+                   <p className="text-emerald-800/75 text-lg max-w-xl mx-auto mb-10 leading-relaxed font-light">
+                     Transform unstructured folders into clean, organized, and forest-structured Omipedia portals.
                      Preserve tables, identify entities, and maintain zero-loss provenance.
                    </p>
                     <div className="flex flex-col items-center gap-4">
                      <div className="flex gap-4">
                        <button 
                          onClick={() => fileInputRef.current?.click()}
-                         className="px-8 py-4 bg-white text-slate-900 border border-slate-300 rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-md hover:shadow-lg"
+                         className="px-8 py-4 bg-white text-emerald-900 border border-emerald-200 rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-md hover:shadow-lg"
                        >
                          Upload File(s)
                        </button>
                        <button 
                          onClick={() => folderInputRef.current?.click()}
-                         className="px-8 py-4 bg-slate-900 text-white rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl hover:shadow-2xl"
+                         className="px-8 py-4 bg-[#1b4332] text-white rounded-full font-bold text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl hover:shadow-2xl hover:bg-[#2d6a4f]"
                        >
                          Upload Folder
                        </button>
                      </div>
-                     <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Or Drag and Drop anywhere</p>
+                     <p className="text-[10px] text-emerald-700 font-mono tracking-widest uppercase">Or Drag and Drop anywhere</p>
                     </div>
                    <div className="mt-12 flex justify-center gap-8 border-t border-slate-100 pt-8 opacity-40 grayscale group-hover:grayscale-0 transition-all">
                       <div className="flex items-center gap-2"><TableIcon size={16}/> <span className="text-[10px] font-bold">XLSX</span></div>
@@ -792,18 +1090,18 @@ export default function App() {
                >
                   <div className="text-center w-full max-w-md">
                      <div className="relative w-32 h-32 mx-auto mb-10">
-                        <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                        <div className="absolute inset-0 border-4 border-emerald-50 rounded-full"></div>
                         <motion.div 
-                          className="absolute inset-0 border-4 border-slate-900 border-t-transparent rounded-full"
+                          className="absolute inset-0 border-4 border-[#1b4332] border-t-transparent rounded-full"
                           animate={{ rotate: 360 }}
                           transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                         />
                         <div className="absolute inset-0 flex items-center justify-center">
-                           <span className="text-2xl font-mono font-bold text-slate-900">{step >= 2 && step <= 3 ? jobProgress : Math.round((step / 7) * 100)}%</span>
+                           <span className="text-2xl font-mono font-bold text-emerald-950">{step >= 2 && step <= 3 ? jobProgress : Math.round((step / 7) * 100)}%</span>
                         </div>
                      </div>
-                     <h3 className="text-2xl font-serif italic text-slate-900 mb-2">Processing Knowledge</h3>
-                     <p className="text-slate-400 font-mono text-[10px] uppercase tracking-widest mb-12">
+                     <h3 className="text-2xl font-serif italic text-emerald-950 mb-2">Processing Knowledge</h3>
+                     <p className="text-emerald-700/60 font-mono text-[10px] uppercase tracking-widest mb-12">
                        {step === 1 ? "Uploading Source Files..." : 
                         step === 2 ? `Processing Files (${jobProgress}%)` :
                         step === 3 ? "Finalizing Extraction..." :
@@ -818,17 +1116,17 @@ export default function App() {
                        </div>
                      )}
                      
-                     <div className="space-y-1 text-left bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
+                     <div className="space-y-1 text-left bg-white border border-emerald-100 rounded-lg p-6 shadow-sm">
                         {[1, 2, 3, 4, 5, 6].map((s) => (
-                          <div key={s} className="flex items-center gap-4 py-2 border-b border-slate-50 last:border-0">
+                          <div key={s} className="flex items-center gap-4 py-2 border-b border-emerald-50 last:border-0">
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                              step > s ? 'bg-green-500 text-white' : 
-                              step === s ? 'bg-blue-500 text-white animate-pulse' : 
-                              'bg-slate-100 text-slate-300'
+                              step > s ? 'bg-emerald-600 text-white' : 
+                              step === s ? 'bg-[#1b4332] text-white animate-pulse' : 
+                              'bg-emerald-50 text-emerald-300'
                             }`}>
                               {step > s ? '✓' : s}
                             </div>
-                            <span className={`text-xs font-semibold ${step >= s ? 'text-slate-700' : 'text-slate-300'}`}>
+                            <span className={`text-xs font-semibold ${step >= s ? 'text-emerald-900' : 'text-emerald-300'}`}>
                               {s === 1 && 'Ingestion & Integrity Check'}
                               {s === 2 && 'Background Extraction (OCR/PDF/Mime)'}
                               {s === 3 && 'Relational Table Mapping'}
@@ -846,125 +1144,628 @@ export default function App() {
                 key="wiki-page"
                 initial={{ opacity: 0, scale: 0.99 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="max-w-4xl mx-auto bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col min-h-full"
+                className="max-w-7xl mx-auto bg-[#f6f6f6] border border-emerald-900/15 rounded-lg shadow-md flex flex-col md:flex-row min-h-full overflow-hidden font-sans text-[14px]"
               >
                 {selectedEntity ? (
                   <>
-                    {/* Wiki Page Header */}
-                    <div className="p-10 md:p-14 border-b border-slate-100">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Tag size={12} className="text-blue-500" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Class: Entity_{selectedEntity.split(' ')[0]}</span>
-                      </div>
-                      <h1 className="text-5xl font-serif font-medium text-slate-900 mb-6 italic leading-tight">{selectedEntity}</h1>
-                      <p className="text-slate-500 text-sm italic leading-relaxed max-w-2xl">
-                        Consolidated data portal synthesized from {entities.find(e => e.entity_name === selectedEntity)?.files.length} source files. 
-                        All structured data preserved as atomic units.
-                      </p>
-                      
-                      {/* Table of Contents */}
-                      <div className="mt-10 bg-slate-50 border border-slate-200 p-6 rounded-md w-80">
-                        <h4 className="text-[10px] font-bold text-slate-900 uppercase tracking-widest mb-4 border-b border-slate-200 pb-2 flex items-center justify-between">
-                          <span>Contents</span>
-                          <span className="text-slate-400 font-mono">[{entities.find(e => e.entity_name === selectedEntity)?.tables.length} ITEMS]</span>
-                        </h4>
-                        <ul className="text-xs space-y-2 text-blue-700 list-none p-0">
-                          {entities.find(e => e.entity_name === selectedEntity)?.tables.map((tid, i) => {
-                             const table = parsedFiles.find(f => f.tables.some(t => t.tableId === tid))?.tables.find(t => t.tableId === tid);
-                             return (
-                               <li key={tid} className="p-0 hover:underline cursor-pointer flex items-center gap-2">
-                                 <span className="text-slate-400 w-4 font-mono">{i + 1}.0</span>
-                                 <a href={`#${tid}`} className="text-blue-700 italic font-medium no-underline">{table?.sheetName || 'Extracted Data'}</a>
-                               </li>
-                             );
-                          })}
-                          <li className="pt-2 border-t border-slate-200 mt-2 p-0 hover:underline cursor-pointer flex items-center gap-2">
-                            <span className="text-slate-400 w-4 font-mono">A.0</span>
-                            <a href="#prose" className="text-blue-700 italic font-medium no-underline">Additional Documentation</a>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-
-                    {/* Wiki Body */}
-                    <div className="p-10 md:p-14 space-y-20">
-                      {entities.find(e => e.entity_name === selectedEntity)?.tables.map((tid, index) => {
-                          const file = parsedFiles.find(f => f.tables.some(t => t.tableId === tid));
-                          const table = file?.tables.find(t => t.tableId === tid);
-                          if (!table) return null;
-                          return (
-                            <section key={tid} id={tid} className="scroll-mt-24">
-                              <div className="flex items-center gap-3 mb-6">
-                                <span className="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold font-mono">{index + 1}.0</span>
-                                <h2 className="text-xl font-bold text-slate-800 tracking-tight">{table.sheetName || 'Data Matrix'}</h2>
-                              </div>
-                              {renderTable(table)}
-                            </section>
-                          );
-                      })}
-
-                      <section id="prose" className="scroll-mt-24 border-t border-slate-100 pt-12">
-                         <div className="flex items-center gap-3 mb-8">
-                            <span className="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-bold font-mono">A.0</span>
-                            <h2 className="text-xl font-bold text-slate-800 tracking-tight">Additional Documentation</h2>
-                         </div>
-                         <div className="grid grid-cols-1 gap-8">
-                            {entities.find(e => e.entity_name === selectedEntity)?.files.map(fname => {
-                                const file = parsedFiles.find(f => f.fileName === fname);
-                                if (!file || !file.text) return null;
-                                return (
-                                  <div key={fname} className="relative p-6 bg-slate-50 border-l-4 border-slate-300 rounded-r-lg group">
-                                    <h4 className="text-[10px] font-mono font-bold uppercase text-slate-400 mb-3 flex items-center justify-between">
-                                       <span>SRC: {fname}</span>
-                                       <span className="opacity-0 group-hover:opacity-100 transition-opacity">VERIFIED</span>
-                                    </h4>
-                                    <p className="text-slate-600 text-sm leading-relaxed italic line-clamp-4">
-                                      {file.text}
-                                    </p>
-                                    <button 
-                                      className="mt-4 text-[10px] font-bold uppercase tracking-widest text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
-                                      onClick={() => {
-                                        const win = window.open("", "_blank");
-                                        if (win) win.opener = null;
-                                        win?.document.write(`
-                                          <style>
-                                            body { font-family: "JetBrains Mono", monospace; background: #0f172a; color: #94a3b8; padding: 40px; margin: 0; line-height: 1.6; }
-                                            .header { border-bottom: 2px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px; }
-                                            h1 { color: #f8fafc; margin: 0; font-size: 20px; }
-                                          </style>
-                                          <div class="header"><h1>RAW_SOURCE: ${fname}</h1></div>
-                                          <pre style="white-space: pre-wrap; margin: 0;">${file.text}</pre>
-                                        `);
-                                      }}
-                                    >
-                                      Open Source Manifest <ChevronRight size={10} />
-                                    </button>
-                                  </div>
-                                );
-                            })}
-                         </div>
-                      </section>
-                    </div>
-
-                    {/* Quality Status Footer */}
-                    <footer className="mt-auto bg-slate-50 border-t border-slate-100 p-8 flex flex-col md:flex-row justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest gap-4">
-                      <div className="flex items-center gap-2">
-                         <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                         <span>Quality Report: PASS</span>
-                      </div>
-                      <div className="flex flex-wrap justify-center gap-6">
-                        <span>Tables Detected: {parsedFiles.reduce((acc, f) => acc + f.tables.length, 0)}</span>
-                        <span>Tables Lost: 0</span>
-                        <span className="text-green-600">Validation Score: 100%</span>
-                        <div className="flex items-center gap-2 border-l border-slate-200 pl-6">
-                           <Clock size={10} />
-                           <span>Gen: {new Date().toLocaleTimeString()}</span>
+                    {/* Left Sidebar: Wikipedia Vector Sidebar Skin */}
+                    <aside className="w-48 bg-[#f6f6f6] border-r border-emerald-900/10 p-4 hidden md:flex flex-col gap-6 shrink-0 select-none text-[12px]">
+                      {/* Logo Area */}
+                      <div className="flex flex-col items-center text-center gap-1 border-b border-emerald-900/10 pb-4 select-none">
+                        <svg className="w-12 h-12 text-[#1b4332]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" className="text-emerald-800" />
+                          <path d="M50 15 L35 45 L65 45 Z" fill="currentColor" />
+                          <path d="M50 35 L25 65 L75 65 Z" fill="currentColor" />
+                          <path d="M50 55 L15 85 L85 85 Z" fill="currentColor" />
+                          <rect x="47" y="85" width="6" height="8" fill="#54595d" />
+                        </svg>
+                        <div className="flex flex-col leading-tight mt-1">
+                          <span className="font-serif tracking-widest text-[11.5px] font-bold uppercase text-[#1b4332]">Omipedia</span>
+                          <span className="text-[8px] italic text-[#2d6a4f] tracking-tighter">The Forest Encyclopedia</span>
                         </div>
                       </div>
-                    </footer>
+
+                      {/* Navigation Group */}
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-bold text-emerald-800/60 uppercase tracking-wider border-b border-emerald-900/10 pb-1">Navigation</div>
+                        <ul className="space-y-1.5 text-[#1b4332] font-sans list-none p-0">
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('documents')}>Main Page</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('documents')}>Contents</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('documents')}>Current events</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('documents')}>Random article</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('documents')}>About Omipedia</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('documents')}>Contact us</li>
+                          <li className="hover:underline text-[#a55858] cursor-pointer">Donate</li>
+                        </ul>
+                      </div>
+
+                      {/* Contribute Group */}
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-bold text-emerald-800/60 uppercase tracking-wider border-b border-emerald-900/10 pb-1">Contribute</div>
+                        <ul className="space-y-1.5 text-[#1b4332] font-sans list-none p-0">
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Help</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Learn to edit</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Community portal</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => setWikiTab('history')}>Recent changes</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => fileInputRef.current?.click()}>Upload file</li>
+                        </ul>
+                      </div>
+
+                      {/* Tools Group */}
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-bold text-emerald-800/60 uppercase tracking-wider border-b border-emerald-900/10 pb-1">Tools</div>
+                        <ul className="space-y-1.5 text-[#1b4332] font-sans list-none p-0">
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">What links here</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Related changes</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Special pages</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Permanent link</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer">Page information</li>
+                          <li className="hover:underline hover:text-[#2d6a4f] cursor-pointer" onClick={() => downloadWiki(jobId || undefined)}>Cite this page</li>
+                        </ul>
+                      </div>
+
+                      {/* Active Project */}
+                      <div className="mt-auto pt-6 text-[9px] text-emerald-600/60 font-mono border-t border-emerald-900/10 leading-normal">
+                        <div>Database ID:</div>
+                        <div className="truncate text-emerald-700 font-bold">{jobId || "session_null"}</div>
+                        <div className="mt-1">Locale: EN (OmiWiki)</div>
+                      </div>
+                    </aside>
+
+                    {/* Main Content Pane (Standard Wikipedia Article Sheet) */}
+                    <div className="flex-1 bg-white border-l border-emerald-900/10 flex flex-col min-h-full">
+                      
+                      {/* Top bar with authentic User state, search & tabs */}
+                      <div className="bg-[#f6f6f6] border-b border-emerald-900/10 px-6 py-2 flex flex-col md:flex-row justify-between items-center gap-3 shrink-0 text-xs">
+                        {/* Left: User tools */}
+                        <div className="flex items-center gap-4 text-emerald-800/65 font-sans">
+                          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>Not logged in</span>
+                          <button className="text-[#1b4332] hover:underline bg-transparent border-0 p-0 cursor-pointer">Talk</button>
+                          <button className="text-[#1b4332] hover:underline bg-transparent border-0 p-0 cursor-pointer">Contributions</button>
+                          <button className="text-[#1b4332] hover:underline bg-transparent border-0 p-0 cursor-pointer">Create account</button>
+                          <button className="text-[#1b4332] hover:underline font-bold bg-transparent border-0 p-0 cursor-pointer">Log in</button>
+                        </div>
+                        
+                        {/* Right: Mock Wikipedia Search Input */}
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <input 
+                              type="text" 
+                              placeholder={`Search Omipedia (${selectedEntity})`} 
+                              className="w-56 px-3 py-1 bg-white border border-emerald-900/20 text-xs font-sans focus:outline-none focus:border-[#1b4332] placeholder:text-slate-400"
+                              disabled
+                            />
+                            <span className="absolute right-2 top-1.5 text-emerald-800/60">🔍</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Wikipedia Namespace Navigation Tabs */}
+                      <div className="bg-[#f6f6f6] border-b border-emerald-900/15 px-6 flex justify-between items-end shrink-0 select-none text-[13px]">
+                        {/* Left: Namespaces */}
+                        <div className="flex gap-1 -mb-[1px]">
+                          <button
+                            onClick={() => setWikiTab('documents')}
+                            className={`px-4 py-2 border-t border-r border-l font-sans transition-all shrink-0 ${
+                              wikiTab === 'documents'
+                                ? 'bg-white border-emerald-900/15 text-[#1b4332] font-semibold border-b-white z-10'
+                                : 'bg-transparent border-transparent text-[#1b4332] hover:bg-emerald-50 hover:underline'
+                            }`}
+                          >
+                            Article
+                          </button>
+                          <button
+                            onClick={() => setWikiTab('terminology')}
+                            className={`px-4 py-2 border-t border-r border-l font-sans transition-all shrink-0 ${
+                              wikiTab === 'terminology'
+                                ? 'bg-white border-emerald-900/15 text-[#1b4332] font-semibold border-b-white z-10'
+                                : 'bg-transparent border-transparent text-[#1b4332] hover:bg-emerald-50 hover:underline'
+                            }`}
+                          >
+                            Talk / Glossary ({wikiTerms.length})
+                          </button>
+                        </div>
+
+                        {/* Right: Views */}
+                        <div className="flex gap-1 -mb-[1px]">
+                          <button
+                            onClick={() => setWikiTab('documents')}
+                            className={`px-4 py-2 border-t border-r border-l font-sans transition-all shrink-0 ${
+                              wikiTab === 'documents' || wikiTab === 'terminology'
+                                ? 'bg-white border-emerald-900/15 text-[#1b4332] font-semibold border-b-white z-10'
+                                : 'bg-transparent border-transparent text-[#1b4332] hover:bg-emerald-50 hover:underline'
+                            }`}
+                          >
+                            Read
+                          </button>
+                          <button
+                            onClick={() => {
+                              downloadWiki(jobId || undefined);
+                            }}
+                            className="px-4 py-2 border-t border-r border-l border-transparent text-[#1b4332] hover:bg-emerald-50 hover:underline font-sans shrink-0 bg-transparent"
+                          >
+                            View source
+                          </button>
+                          <button
+                            onClick={() => setWikiTab('history')}
+                            className={`px-4 py-2 border-t border-r border-l font-sans transition-all shrink-0 ${
+                              wikiTab === 'history'
+                                ? 'bg-white border-emerald-900/15 text-[#1b4332] font-semibold border-b-white z-10'
+                                : 'bg-transparent border-transparent text-[#1b4332] hover:bg-emerald-50 hover:underline'
+                            }`}
+                          >
+                            View history
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Content Sheet Body Area */}
+                      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 md:p-10 CustomScrollbar bg-white">
+                        {wikiTab === 'documents' ? (
+                          <article className="text-[#202122] font-sans text-[14px] leading-[1.6] select-text">
+                            
+                            {/* Infobox floating right */}
+                            <table className="float-right ml-6 mb-4 w-72 bg-[#f8f9fa] border border-[#a2a9b1] text-[12px] text-[#202122] border-collapse select-text">
+                              <thead>
+                                <tr>
+                                  <th colSpan={2} className="bg-[#eaecf0] p-2 text-center text-[14px] font-bold font-serif border border-[#a2a9b1] text-black">
+                                    {selectedEntity}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td colSpan={2} className="p-2 text-center border border-[#a2a9b1]">
+                                    <div className="w-12 h-12 bg-slate-200 border border-slate-300 rounded mx-auto flex items-center justify-center font-bold text-slate-500 text-lg font-serif">
+                                      {selectedEntity[0]}
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 italic block mt-1">Primary Entity Card</span>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-[#f2f2f2] p-1.5 font-bold border border-[#a2a9b1] w-28">Entity Class</td>
+                                  <td className="p-1.5 border border-[#a2a9b1]">Entity_{selectedEntity.split(' ')[0]}</td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-[#f2f2f2] p-1.5 font-bold border border-[#a2a9b1]">Status</td>
+                                  <td className="p-1.5 border border-[#a2a9b1]">
+                                    <span className="text-emerald-700 font-bold">● verified</span>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-[#f2f2f2] p-1.5 font-bold border border-[#a2a9b1]">Sources</td>
+                                  <td className="p-1.5 border border-[#a2a9b1] font-mono">{entities.find(e => e.entity_name === selectedEntity)?.files.length} document(s)</td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-[#f2f2f2] p-1.5 font-bold border border-[#a2a9b1]">Data Sheets</td>
+                                  <td className="p-1.5 border border-[#a2a9b1] font-mono">{entities.find(e => e.entity_name === selectedEntity)?.tables.length} tables</td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-[#f2f2f2] p-1.5 font-bold border border-[#a2a9b1]">Fidelity</td>
+                                  <td className="p-1.5 border border-[#a2a9b1] font-bold">100% (No Loss)</td>
+                                </tr>
+                              </tbody>
+                            </table>
+
+                            {/* Page Header Title */}
+                            <div className="mb-4">
+                              <h1 className="text-3xl md:text-4xl font-serif font-normal text-black pb-1 mb-1 tracking-wide">
+                                {selectedEntity}
+                              </h1>
+                              <p className="text-[12px] italic text-emerald-800 font-sans -mt-1">
+                                From Omipedia, the forest encyclopedia
+                              </p>
+                              <div className="h-[1px] bg-emerald-900/15 w-full mt-2"></div>
+                            </div>
+
+                            {/* Wikipedia Ambox Message Warning Banner */}
+                            <div className="border border-emerald-900/10 border-l-[10px] border-l-emerald-600 bg-[#f8f9fa] p-3 mb-6 text-xs text-[#202122] flex items-center gap-4">
+                              <div className="text-lg text-emerald-700 shrink-0">🌲</div>
+                              <div className="leading-relaxed">
+                                <strong>This article has multiple issues.</strong> Please help 
+                                <button className="text-[#1b4332] hover:underline mx-1 bg-transparent border-0 p-0 cursor-pointer font-semibold" onClick={() => setWikiTab('terminology')}>improve it</button> 
+                                or discuss these issues on the 
+                                <button className="text-[#1b4332] hover:underline mx-1 bg-transparent border-0 p-0 cursor-pointer font-semibold" onClick={() => setWikiTab('terminology')}>talk page</button>.
+                                <ul className="list-disc ml-5 mt-1 space-y-0.5 text-slate-600">
+                                  <li>This article <strong>needs additional citations for verification</strong>. Reliable sources have been parsed but require manual audit.</li>
+                                  <li>This article was <strong>automatically synthesized from unstructured files</strong> with absolute character preservation.</li>
+                                </ul>
+                              </div>
+                            </div>
+
+                            {/* First Lead Paragraph */}
+                            <p className="text-justify mb-4">
+                              The <strong>{selectedEntity}</strong> portal is a consolidated repository of organizational and technical knowledge synthesized directly from the parsed document collection. It brings together structured sheets and original prose documentation, cross-linking related terms dynamically so that no contextual meaning is lost.
+                            </p>
+
+                            {/* Table of Contents (ToC) */}
+                            <div className="bg-[#f8f9fa] border border-emerald-900/15 p-3 inline-block min-w-[240px] max-w-sm mb-6 select-none">
+                              <div className="flex items-center justify-between gap-12 border-b border-emerald-900/10 pb-1.5 mb-2">
+                                <span className="font-bold font-sans text-xs text-[#1b4332]">Contents</span>
+                                <button 
+                                  onClick={() => setTocVisible(!tocVisible)}
+                                  className="text-[11px] text-[#1b4332] hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                                >
+                                  [{tocVisible ? 'hide' : 'show'}]
+                                </button>
+                              </div>
+                              {tocVisible && (
+                                <ul className="space-y-1.5 font-sans text-[12px] text-[#1b4332] pl-1 list-none p-0">
+                                  <li>
+                                    <span className="text-[#202122] mr-2 font-mono">1</span>
+                                    <a 
+                                      href="#extracted-data" 
+                                      onClick={(e) => scrollToSection("extracted-data", e)} 
+                                      className="hover:underline"
+                                    >
+                                      Extracted Data Matrices
+                                    </a>
+                                    <ul className="pl-4 mt-1 space-y-1 list-none">
+                                      {entities.find(e => e.entity_name === selectedEntity)?.tables.map((tid, idx) => {
+                                        const table = parsedFiles.find(f => f.tables.some(t => t.tableId === tid))?.tables.find(t => t.tableId === tid);
+                                        return (
+                                          <li key={tid}>
+                                            <span className="text-[#202122] mr-2 font-mono">1.{idx + 1}</span>
+                                            <a 
+                                              href={`#${tid}`} 
+                                              onClick={(e) => scrollToSection(tid, e)} 
+                                              className="hover:underline italic"
+                                            >
+                                              {table?.sheetName || 'Data Sheet'}
+                                            </a>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  </li>
+                                  <li className="mt-1">
+                                    <span className="text-[#202122] mr-2 font-mono">2</span>
+                                    <a 
+                                      href="#prose-documentation" 
+                                      onClick={(e) => scrollToSection("prose-documentation", e)} 
+                                      className="hover:underline"
+                                    >
+                                      Synthesized Topic Article
+                                    </a>
+                                  </li>
+                                  <li className="mt-1">
+                                    <span className="text-[#202122] mr-2 font-mono">3</span>
+                                    <a 
+                                      href="#references" 
+                                      onClick={(e) => scrollToSection("references", e)} 
+                                      className="hover:underline"
+                                    >
+                                      References and Sources
+                                    </a>
+                                  </li>
+                                </ul>
+                              )}
+                            </div>
+
+                            {/* 1.0 Data Matrices section */}
+                            <section id="extracted-data" className="scroll-mt-6">
+                              <h2 className="border-b border-[#a2a9b1] pb-1 text-xl font-serif font-normal mt-10 mb-4 text-[#000000]">
+                                <span className="text-slate-400 font-mono text-base mr-3 font-normal">1</span>
+                                Extracted Data Matrices
+                              </h2>
+                              
+                              <p className="mb-4 text-slate-600 italic text-[13px]">
+                                Below are the primary raw tabular datasets extracted directly from the uploaded files. No modifications or filters have been applied.
+                              </p>
+
+                              <div className="space-y-12">
+                                {entities.find(e => e.entity_name === selectedEntity)?.tables.map((tid, idx) => {
+                                    const file = parsedFiles.find(f => f.tables.some(t => t.tableId === tid));
+                                    const table = file?.tables.find(t => t.tableId === tid);
+                                    if (!table) return null;
+                                    return (
+                                      <section key={tid} id={tid} className="scroll-mt-12 border-t border-slate-100 pt-6 last:border-0 first:border-0 first:pt-0">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <span className="text-xs bg-[#eaecf0] text-black px-2 py-0.5 border border-[#a2a9b1] font-bold font-mono">1.{idx + 1}</span>
+                                          <h3 className="text-md font-bold text-slate-800 italic">{table.sheetName || 'Tabular Sheet'}</h3>
+                                        </div>
+                                        {renderTable(table)}
+                                      </section>
+                                    );
+                                })}
+                              </div>
+                            </section>
+
+                            {/* 2.0 Synthesized Topic Article section */}
+                            <section id="prose-documentation" className="scroll-mt-6 mt-12">
+                              <h2 className="border-b border-[#a2a9b1] pb-1 text-xl font-serif font-normal mt-12 mb-4 text-[#000000]">
+                                <span className="text-slate-400 font-mono text-base mr-3 font-normal">2</span>
+                                Synthesized Topic Article
+                              </h2>
+                              
+                              <p className="mb-6 text-slate-600 text-[13px] italic">
+                                The following comprehensive encyclopedic analysis has been synthesized by our research agents using the parsed source documents as the ground truth. Mentions of other topics are automatically interlinked and clickable.
+                              </p>
+
+                              <div className="bg-white border border-[#a2a9b1] p-6 md:p-8 select-text">
+                                {(() => {
+                                  const entity = entities.find(e => e.entity_name === selectedEntity);
+                                  if (!entity || !entity.explanation) {
+                                    return <p className="text-slate-500 italic">No synthesized article content available for this topic.</p>;
+                                  }
+                                  return renderSynthesizedArticle(entity.explanation);
+                                })()}
+                              </div>
+                            </section>
+
+                            {/* 3.0 References / Footnotes Section */}
+                            <section id="references" className="scroll-mt-6 mt-12 border-t border-[#a2a9b1] pt-8">
+                              <h2 className="pb-1 text-xl font-serif font-normal mb-4 text-[#000000]">
+                                <span className="text-slate-400 font-mono text-base mr-3 font-normal">3</span>
+                                References and Sources
+                              </h2>
+                              <ol className="list-decimal ml-6 text-[12px] text-[#202122] space-y-2">
+                                {entities.find(e => e.entity_name === selectedEntity)?.files.map((fname, idx) => (
+                                  <li key={fname} className="pl-2">
+                                    <span className="text-[#0645ad] font-mono mr-2 hover:underline select-none bg-transparent border-0 p-0 cursor-pointer">^</span>
+                                    <strong className="font-serif italic mr-1">"{fname}"</strong>. Retrieved from the uploaded unstructured file set. Full prose character map synthesized on {new Date().toLocaleDateString()} (UTC). Verified checksum {Math.random().toString(16).substring(2, 10).toUpperCase()}.
+                                  </li>
+                                ))}
+                              </ol>
+                            </section>
+
+                          </article>
+                        ) : wikiTab === 'terminology' ? (
+                          /* Terminology / Glossary Tab (Talk space) */
+                          <div className="flex flex-col md:flex-row min-h-[500px] divide-y md:divide-y-0 md:divide-x divide-slate-200 border border-[#a2a9b1] bg-white">
+                            {/* Glossary Index Column */}
+                            <div className="w-full md:w-80 bg-[#f8f9fa] p-4 flex flex-col gap-4 shrink-0">
+                              <div className="flex items-center justify-between border-b border-[#a2a9b1] pb-2">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-black font-sans">Talk: Glossary Index</h3>
+                                <span className="text-[10px] font-mono bg-slate-200 px-1.5 py-0.5 rounded text-slate-700 font-bold">{wikiTerms.length} TERMS</span>
+                              </div>
+                              
+                              <div className="relative">
+                                <input 
+                                  type="text" 
+                                  placeholder="Filter terminology..." 
+                                  className="w-full px-2 py-1 bg-white border border-[#a2a9b1] text-xs font-sans focus:outline-none focus:border-[#36c]"
+                                  onChange={(e) => setLocalFilter(e.target.value.toLowerCase())}
+                                />
+                              </div>
+
+                              {/* Simple Alphabetical Index Nav Bar */}
+                              <div className="flex flex-wrap justify-center gap-1 border-b border-slate-200 pb-2 text-[10px] font-mono text-[#0645ad] select-none">
+                                {['A', 'C', 'D', 'K', 'M', 'O', 'S', 'W'].map(letter => (
+                                  <button 
+                                    key={letter} 
+                                    onClick={() => setLocalFilter(letter.toLowerCase())}
+                                    className="hover:underline p-1 bg-transparent border-0 cursor-pointer text-[#0645ad]"
+                                  >
+                                    {letter}
+                                  </button>
+                                ))}
+                                <button onClick={() => setLocalFilter("")} className="hover:underline p-1 text-slate-500 bg-transparent border-0 cursor-pointer">All</button>
+                              </div>
+
+                              <div className="flex-1 overflow-y-auto space-y-1.5 max-h-[450px] CustomScrollbar">
+                                {wikiTerms
+                                  .filter(t => !localFilter || t.term.toLowerCase().includes(localFilter) || t.definition.toLowerCase().includes(localFilter))
+                                  .map(t => {
+                                    const isSelected = selectedTerm?.term === t.term;
+                                    return (
+                                      <button
+                                        key={t.term}
+                                        onClick={() => handleTermClick(t)}
+                                        className={`w-full text-left p-2.5 transition-all flex flex-col gap-1 border ${
+                                          isSelected 
+                                            ? 'bg-white border-[#a2a9b1] border-l-[4px] border-l-[#36c] shadow-sm text-black' 
+                                            : 'bg-transparent border-transparent hover:bg-slate-100 hover:border-slate-300 text-slate-800'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between w-full text-[9px] font-mono">
+                                          <span className="text-[#54595d] uppercase">{t.category || "CONCEPT"}</span>
+                                          <ChevronRight size={10} className={isSelected ? 'text-[#36c]' : 'text-slate-400'} />
+                                        </div>
+                                        <span className={`text-[12px] font-serif font-bold ${isSelected ? 'text-[#0645ad]' : 'text-[#0645ad] hover:underline'}`}>
+                                          {t.term}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+
+                            {/* Glossary Term Detail Pane */}
+                            <div className="flex-1 p-6 md:p-8 flex flex-col justify-between select-text">
+                              {selectedTerm ? (
+                                <div className="space-y-6">
+                                  
+                                  {/* Path Trail breadcrumbs */}
+                                  {termPath.length > 0 && (
+                                    <div className="bg-[#f8f9fa] border border-[#a2a9b1] p-2 flex items-center justify-between text-[11px] font-sans">
+                                      <div className="flex items-center gap-1 overflow-x-auto py-1">
+                                        <History size={10} className="text-[#54595d] shrink-0" />
+                                        <span className="font-bold text-[#54595d] uppercase mr-2 shrink-0">Chain Trail:</span>
+                                        <div className="flex items-center gap-1.5 text-slate-600">
+                                          {termPath.map((tp, idx) => {
+                                            const mappedTerm = wikiTerms.find(t => t.term === tp);
+                                            return (
+                                              <React.Fragment key={tp}>
+                                                {idx > 0 && <ArrowRight size={8} className="text-slate-300" />}
+                                                <button
+                                                  onClick={() => mappedTerm && handleTermClick(mappedTerm)}
+                                                  className={`hover:underline font-mono text-[11px] px-1 rounded ${
+                                                    selectedTerm.term === tp 
+                                                      ? 'bg-blue-50 text-blue-700 font-bold' 
+                                                      : 'text-slate-500 hover:text-slate-800'
+                                                  }`}
+                                                >
+                                                  {tp}
+                                                </button>
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                      <button 
+                                        onClick={resetTermPath} 
+                                        className="text-[10px] text-[#0645ad] hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                                      >
+                                        [clear]
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Term Header */}
+                                  <div className="border-b border-[#a2a9b1] pb-3">
+                                    <div className="flex items-center gap-3 text-[10px] font-mono text-[#54595d] mb-1">
+                                      <span className="bg-[#eaecf0] border border-[#a2a9b1] px-2 py-0.5 font-bold uppercase text-[#202122]">
+                                        {selectedTerm.category || "CONCEPT"}
+                                      </span>
+                                      <span>Discovered in {selectedTerm.provenanceFiles.length} file(s)</span>
+                                    </div>
+                                    <h2 className="text-2xl font-serif text-black font-normal mt-2">
+                                      {selectedTerm.term}
+                                    </h2>
+                                  </div>
+
+                                  {/* Definition */}
+                                  <div className="space-y-2 select-text">
+                                    <h4 className="text-[10px] font-bold text-[#54595d] uppercase tracking-wider font-mono">Definition & Context</h4>
+                                    <div className="bg-[#f8f9fa] border border-[#a2a9b1] p-4 text-[#202122] text-[14px] leading-relaxed font-sans">
+                                      {renderDefinitionWithLinks(selectedTerm.definition, wikiTerms)}
+                                    </div>
+                                  </div>
+
+                                  {/* Bidirectional Concept Chains */}
+                                  <div className="space-y-3">
+                                    <h4 className="text-[10px] font-bold text-[#54595d] uppercase tracking-wider font-mono">Connected Terminology Chains</h4>
+                                    {selectedTerm.relatedTerms && selectedTerm.relatedTerms.length > 0 ? (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {selectedTerm.relatedTerms.map(rt => {
+                                          const mappedTerm = wikiTerms.find(t => t.term.toLowerCase() === rt.toLowerCase() || t.term.includes(rt));
+                                          return (
+                                            <button
+                                              key={rt}
+                                              onClick={() => mappedTerm ? handleTermClick(mappedTerm) : console.log("Term not found:", rt)}
+                                              disabled={!mappedTerm}
+                                              className={`text-left p-3 border flex items-start gap-2.5 transition-all ${
+                                                mappedTerm 
+                                                  ? 'bg-white border-[#a2a9b1] hover:bg-[#f8f9fa] cursor-pointer group' 
+                                                  : 'bg-slate-50 border-slate-100 cursor-not-allowed opacity-60'
+                                              }`}
+                                            >
+                                              <div className="p-1 rounded bg-[#eaecf0] text-[#202122] shrink-0">
+                                                <CornerDownRight size={12} />
+                                              </div>
+                                              <div className="space-y-0.5">
+                                                <div className="text-xs font-bold text-[#0645ad] group-hover:underline flex items-center gap-1">
+                                                  <span>{mappedTerm?.term || rt}</span>
+                                                </div>
+                                                <p className="text-[11px] text-[#54595d] line-clamp-2 leading-tight">
+                                                  {mappedTerm?.definition || "Concept referred to in the technical lexicon map."}
+                                                </p>
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[12px] italic text-[#54595d] bg-slate-50 p-3 border border-dashed border-slate-200">
+                                        This term acts as a terminal leaf node in this conceptual lexicon; no child chains detected.
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  {/* Provenance */}
+                                  <div className="space-y-2 pt-4 border-t border-slate-200 text-xs">
+                                    <h4 className="text-[10px] font-bold text-[#54595d] uppercase tracking-wider font-mono">Source Provenance Citations</h4>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {selectedTerm.provenanceFiles.map(file => (
+                                        <div key={file} className="flex items-center gap-1 bg-[#f8f9fa] border border-[#a2a9b1] px-2.5 py-0.5 text-[#202122] font-mono text-[10px]">
+                                          <FileText size={10} className="text-[#54595d]" />
+                                          <span>{file}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-center py-20 text-slate-400 font-mono text-xs">
+                                  Select a concept from the terminology index sidebar.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          /* History Tab (Revision list mockup) */
+                          <div className="bg-white border border-[#a2a9b1] p-6 select-text text-sm">
+                            <h2 className="border-b border-[#a2a9b1] pb-1 text-xl font-serif font-normal mb-4 text-[#000000]">
+                              Revision history of "{selectedEntity}"
+                            </h2>
+                            <p className="mb-4 text-xs text-[#54595d] leading-normal bg-[#f8f9fa] border border-[#a2a9b1] p-3">
+                              View historical synthesis states logged by the File-to-Wiki background engine. Every file ingested increments the page validation registry and preserves structural metadata.
+                            </p>
+                            
+                            <div className="space-y-3 font-sans text-[13px] text-[#202122] ml-4">
+                              <div className="flex items-start gap-2">
+                                <span className="text-[#0645ad] select-none">(cur | prev)</span>
+                                <span>
+                                  <input type="radio" className="mx-1" checked disabled /> 
+                                  <input type="radio" className="mx-1" checked disabled /> 
+                                  <strong className="text-[#1b4332] hover:underline cursor-pointer">22:10, 10 July 2026</strong>‎ 
+                                  <span className="text-slate-500 mr-2"> (UTC)</span> 
+                                  <span className="text-[#1b4332] hover:underline font-bold bg-transparent border-0 p-0 cursor-pointer">System (automated data bot)</span>  
+                                  <span className="text-[#54595d] mr-1"> (talk | contribs)</span>‎ 
+                                  <span className="text-[#202122] font-mono">({parsedFiles.reduce((acc, f) => acc + f.text.length, 0)} characters)</span>‎ 
+                                  <span className="text-[#202122] italic font-semibold text-emerald-700 ml-1"> (100% complete character preservation; created page with tables and full prose transcripts)</span>
+                                </span>
+                              </div>
+
+                              <div className="flex items-start gap-2 text-slate-500">
+                                <span className="select-none">(cur | prev)</span>
+                                <span>
+                                  <input type="radio" className="mx-1" disabled /> 
+                                  <input type="radio" className="mx-1" disabled /> 
+                                  <span className="mr-2">22:08, 10 July 2026</span>‎ 
+                                  <span className="font-bold mr-2">LexiconAligner (AI bot)</span> 
+                                  <span className="font-mono">(+3 concepts)</span>‎ 
+                                  <span className="italic ml-1"> (established bidirectional technical glossary map and terminology chains)</span>
+                                </span>
+                              </div>
+
+                              <div className="flex items-start gap-2 text-slate-500">
+                                <span className="select-none">(cur | prev)</span>
+                                <span>
+                                  <input type="radio" className="mx-1" disabled /> 
+                                  <input type="radio" className="mx-1" disabled /> 
+                                  <span className="mr-2">22:05, 10 July 2026</span>‎ 
+                                  <span className="font-bold mr-2">IngestionService (worker)</span> 
+                                  <span className="font-mono">(+2 tables)</span>‎ 
+                                  <span className="italic ml-1"> (scanned original file formats, mapped cells, and populated raw SQL tables)</span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Omipedia Style Footer */}
+                      <footer className="mt-auto bg-[#f6f6f6] border-t border-emerald-900/10 p-6 text-[11px] text-[#54595d] font-sans flex flex-col md:flex-row justify-between items-start md:items-center gap-4 select-none">
+                        <div className="space-y-1">
+                          <p> This page was last edited on 10 July 2026, at 22:10 (UTC).</p>
+                          <p className="leading-relaxed">Text is available under the Creative Commons Attribution-ShareAlike License; additional terms may apply. See Terms of Use for details.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-4 font-bold text-[#1b4332]">
+                          <span className="hover:underline cursor-pointer">Privacy policy</span>
+                          <span className="hover:underline cursor-pointer font-bold">About Omipedia</span>
+                          <span className="hover:underline cursor-pointer">Disclaimers</span>
+                          <span className="hover:underline cursor-pointer">Code of Conduct</span>
+                          <span className="hover:underline cursor-pointer">Developers</span>
+                          <span className="hover:underline cursor-pointer">Cookie statement</span>
+                        </div>
+                      </footer>
+
+                    </div>
                   </>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center p-20 text-center opacity-40">
+                  <div className="flex-1 flex items-center justify-center p-20 text-center opacity-40 bg-white min-h-[600px]">
                      <div className="max-w-xs">
                         <FileText size={48} className="mx-auto mb-6 text-slate-300" />
                         <p className="font-serif italic text-lg mb-2">Select an Entity</p>

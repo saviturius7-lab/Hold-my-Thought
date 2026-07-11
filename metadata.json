@@ -2,5 +2,7 @@
   "name": "Hold my Thought",
   "description": "Professional-grade research portal that transforms messy folders (XLSX, PDF, DOCX, IMG) into organized, verifiable Wiki portals with preserved data matrices and zero-loss provenance.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
